@@ -12,6 +12,9 @@ final class ProjectStore: ObservableObject {
 
     private let modelContext: ModelContext
 
+    /// The most recent save error, if any. Observe this to show an alert/banner.
+    @Published var lastSaveError: String?
+
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
     }
@@ -77,7 +80,9 @@ final class ProjectStore: ObservableObject {
     private func save() {
         do {
             try modelContext.save()
+            lastSaveError = nil
         } catch {
+            lastSaveError = error.localizedDescription
             print("[ProjectStore] Failed to save model context: \(error.localizedDescription)")
         }
     }

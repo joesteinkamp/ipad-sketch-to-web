@@ -46,17 +46,17 @@ struct ErrorBanner: View {
     }
 
     private func dismiss() {
-        withAnimation(.easeInOut(duration: 0.3)) {
+        withAnimation(.easeInOut(duration: TimingConstants.bannerDismissAnimation)) {
             isVisible = false
         }
         // Allow the exit animation to finish before calling onDismiss.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + TimingConstants.bannerDismissAnimation) {
             onDismiss()
         }
     }
 
     private func scheduleAutoDismiss() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + TimingConstants.errorBannerTimeout) {
             guard isVisible else { return }
             dismiss()
         }
@@ -86,7 +86,7 @@ extension View {
                 ErrorBanner(message: message, onDismiss: onDismiss)
                     .onAppear {
                         // Schedule auto-dismiss when the banner appears.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + TimingConstants.errorBannerTimeout) {
                             onDismiss()
                         }
                     }

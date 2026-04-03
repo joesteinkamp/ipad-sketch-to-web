@@ -8,8 +8,11 @@ import PencilKit
 final class Generation {
     var id: UUID
     var createdAt: Date
+
     var htmlPreview: String
     var reactCode: String
+
+    /// Compressed (gzipped) PencilKit drawing data.
     var drawingSnapshot: Data
 
     var project: Project?
@@ -24,7 +27,22 @@ final class Generation {
         self.createdAt = Date()
         self.htmlPreview = htmlPreview
         self.reactCode = reactCode
-        self.drawingSnapshot = drawingSnapshot
+        self.drawingSnapshot = Generation.compress(drawingSnapshot)
         self.project = project
+    }
+
+    /// Returns the decompressed drawing snapshot data.
+    var decompressedSnapshot: Data {
+        Generation.decompress(drawingSnapshot)
+    }
+
+    // MARK: - Compression
+
+    private static func compress(_ data: Data) -> Data {
+        (try? (data as NSData).compressed(using: .zlib)) as Data? ?? data
+    }
+
+    private static func decompress(_ data: Data) -> Data {
+        (try? (data as NSData).decompressed(using: .zlib)) as Data? ?? data
     }
 }

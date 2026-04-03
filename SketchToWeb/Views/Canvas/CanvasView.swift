@@ -16,7 +16,11 @@ struct CanvasView: View {
     @State private var isToolPickerVisible: Bool = true
     @State private var showTextToSketch = false
     @State private var showTemplatePicker = false
+    @State private var activeTool: DrawingTool = .pen
+    @State private var penThickness: PenThickness = .medium
+    @State private var drawingCorruptionError: String?
 
+    @StateObject private var canvasController = CanvasController()
     @EnvironmentObject private var appState: AppState
 
     /// Debounce timer used to coalesce rapid drawing changes before persisting.
@@ -34,7 +38,10 @@ struct CanvasView: View {
                 // Full-bleed PencilKit canvas
                 PencilCanvasView(
                     drawing: $drawing,
-                    isToolPickerVisible: $isToolPickerVisible
+                    isToolPickerVisible: $isToolPickerVisible,
+                    activeTool: activeTool,
+                    penWidth: penThickness.rawValue,
+                    canvasController: canvasController
                 )
                 .ignoresSafeArea()
 
@@ -49,9 +56,10 @@ struct CanvasView: View {
                 VStack {
                     Spacer()
                     CanvasToolbar(
-                        onClear: clearDrawing,
-                        onUndo: undoDrawing,
-                        onRedo: redoDrawing
+                        canvasController: canvasController,
+                        activeTool: $activeTool,
+                        penThickness: $penThickness,
+                        onClear: clearDrawing
                     )
                     .padding(.bottom, 24)
                 }
@@ -104,6 +112,16 @@ struct CanvasView: View {
                 canvasSize: appState.canvasSize
             )
         }
+        .alert("Drawing Data Corrupted", isPresented: Binding(
+            get: { drawingCorruptionError != nil },
+            set: { if !$0 { drawingCorruptionError = nil } }
+        )) {
+            Button("OK") { drawingCorruptionError = nil }
+        } message: {
+            if let error = drawingCorruptionError {
+                Text("The saved drawing could not be loaded and was reset. Error: \(error)")
+            }
+        }
     }
 
     // MARK: - Actions
@@ -124,19 +142,6 @@ struct CanvasView: View {
         saveImmediately()
     }
 
-    /// Triggers an undo on the canvas's undo manager via notification.
-    /// PencilKit internally manages its own undo stack through the UIView
-    /// responder chain, so we post a notification that the Coordinator can
-    /// forward. As a simpler alternative we use the shared UndoManager.
-    private func undoDrawing() {
-        NotificationCenter.default.post(name: .canvasUndoRequested, object: nil)
-    }
-
-    /// Triggers a redo on the canvas.
-    private func redoDrawing() {
-        NotificationCenter.default.post(name: .canvasRedoRequested, object: nil)
-    }
-
     // MARK: - Persistence
 
     /// Loads the drawing from the project's persisted data, if available.
@@ -145,7 +150,8 @@ struct CanvasView: View {
         do {
             drawing = try PKDrawing(data: data)
         } catch {
-            print("[CanvasView] Failed to decode drawing data: \(error)")
+            drawingCorruptionError = error.localizedDescription
+            drawing = PKDrawing()
         }
     }
 
@@ -154,7 +160,7 @@ struct CanvasView: View {
         appState.currentDrawing = newDrawing
         saveTask?.cancel()
         saveTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(500))
+            try? await Task.sleep(for: TimingConstants.drawingDebounce)
             guard !Task.isCancelled else { return }
             project?.drawingData = newDrawing.dataRepresentation()
         }
@@ -176,16 +182,9 @@ struct CanvasView: View {
         guard autoConvertEnabled, !newDrawing.strokes.isEmpty else { return }
 
         autoConvertTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(3))
+            try? await Task.sleep(for: TimingConstants.autoConvertDelay)
             guard !Task.isCancelled else { return }
             appState.convertDrawing()
         }
     }
-}
-
-// MARK: - Notifications for Undo / Redo
-
-extension Notification.Name {
-    static let canvasUndoRequested = Notification.Name("canvasUndoRequested")
-    static let canvasRedoRequested = Notification.Name("canvasRedoRequested")
 }

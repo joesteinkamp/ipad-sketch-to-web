@@ -20,17 +20,7 @@ struct ProjectListView: View {
     @State private var renameFolderText: String = ""
     @State private var colorPickerFolder: ProjectFolder?
 
-    // Predefined folder colors
-    private let folderColors: [(name: String, hex: String)] = [
-        ("Blue", "#007AFF"),
-        ("Purple", "#AF52DE"),
-        ("Green", "#34C759"),
-        ("Orange", "#FF9500"),
-        ("Red", "#FF3B30"),
-        ("Teal", "#5AC8FA"),
-        ("Pink", "#FF2D55"),
-        ("Indigo", "#5856D6"),
-    ]
+    private var folderColors: [(name: String, hex: String)] { AppColors.folderPalette }
 
     var body: some View {
         List(selection: $selectedProject) {

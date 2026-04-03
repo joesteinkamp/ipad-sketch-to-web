@@ -46,7 +46,7 @@ struct DrawingHintOverlay: View {
 
     private func scheduleDismiss() {
         Task { @MainActor in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: TimingConstants.hintDuration)
             withAnimation {
                 hints = []
             }

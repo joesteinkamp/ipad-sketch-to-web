@@ -119,7 +119,7 @@ private struct GenerationRow: View {
 
     @ViewBuilder
     private var drawingThumbnail: some View {
-        if let drawing = try? PKDrawing(data: generation.drawingSnapshot) {
+        if let drawing = try? PKDrawing(data: generation.decompressedSnapshot) {
             let image = drawing.image(
                 from: drawing.bounds,
                 scale: UIScreen.main.scale
