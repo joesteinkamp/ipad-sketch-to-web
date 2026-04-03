@@ -42,11 +42,12 @@ struct ContentView: View {
         .onChange(of: selectedProject) { _, newProject in
             appState.currentProject = newProject
         }
+        .onChange(of: appState.pendingGeneration) { _, generation in
+            guard let generation else { return }
+            modelContext.insert(generation)
+        }
         .onAppear {
             appState.currentProject = selectedProject
-            appState.onGenerationCreated = { generation in
-                modelContext.insert(generation)
-            }
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()

@@ -8,13 +8,14 @@ struct CodePreviewView: View {
     let language: String
 
     @State private var showCopiedToast = false
+    @State private var highlightedResult: AttributedString?
 
     // MARK: - Body
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             ScrollView([.horizontal, .vertical]) {
-                Text(highlightedCode)
+                Text(highlightedResult ?? AttributedString(code))
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
                     .padding()
@@ -29,7 +30,7 @@ struct CodePreviewView: View {
                     showCopiedToast = true
                 }
                 // Dismiss toast after a short delay.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + TimingConstants.toastDuration) {
                     withAnimation {
                         showCopiedToast = false
                     }
@@ -56,11 +57,17 @@ struct CodePreviewView: View {
                     .transition(.opacity.combined(with: .scale))
             }
         }
+        .onChange(of: code) { _, newCode in
+            highlightedResult = Self.highlight(newCode)
+        }
+        .onAppear {
+            highlightedResult = Self.highlight(code)
+        }
     }
 
     // MARK: - Syntax Highlighting
 
-    private var highlightedCode: AttributedString {
+    private static func highlight(_ code: String) -> AttributedString {
         var result = AttributedString(code)
 
         // Base style: light text on dark background.
@@ -77,19 +84,11 @@ struct CodePreviewView: View {
         return result
     }
 
-    private static let keywords: Set<String> = [
-        "import", "export", "function", "const", "let", "var",
-        "return", "from", "default", "if", "else", "class",
-        "extends", "new", "this", "async", "await", "try",
-        "catch", "throw", "typeof", "interface", "type"
-    ]
-
     /// Highlights JavaScript/JSX keywords in purple.
-    private func highlightKeywords(_ attributed: inout AttributedString) {
+    private static func highlightKeywords(_ attributed: inout AttributedString) {
         let plain = String(attributed.characters)
         let nsRange = NSRange(plain.startIndex..., in: plain)
 
-        // Match whole words that are keywords.
         guard let regex = try? NSRegularExpression(pattern: #"\b(?:import|export|function|const|let|var|return|from|default|if|else|class|extends|new|this|async|await|try|catch|throw|typeof|interface|type)\b"#) else { return }
 
         for match in regex.matches(in: plain, range: nsRange) {
@@ -100,7 +99,7 @@ struct CodePreviewView: View {
     }
 
     /// Applies a foreground color to all matches of `pattern` in the attributed string.
-    private func highlightPattern(_ attributed: inout AttributedString, pattern: String, color: Color) {
+    private static func highlightPattern(_ attributed: inout AttributedString, pattern: String, color: Color) {
         let plain = String(attributed.characters)
         let nsRange = NSRange(plain.startIndex..., in: plain)
 

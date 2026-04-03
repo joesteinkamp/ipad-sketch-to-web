@@ -113,7 +113,7 @@ final class GeminiClient: Sendable {
     /// Each yielded value is the full accumulated text so far (not just the new delta).
     func streamMessage(systemPrompt: String, imageData: Data, userText: String) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
-            Task {
+            let task = Task {
                 do {
                     var request = try self.buildRequest(systemPrompt: systemPrompt, imageData: imageData, userText: userText)
                     request.url = self.streamingEndpoint
@@ -149,6 +149,8 @@ final class GeminiClient: Sendable {
                     var accumulated = ""
 
                     for try await line in bytes.lines {
+                        guard !Task.isCancelled else { break }
+
                         // SSE format: lines starting with "data: " contain the JSON payload.
                         guard line.hasPrefix("data: ") else { continue }
                         let jsonString = String(line.dropFirst(6))
@@ -169,6 +171,11 @@ final class GeminiClient: Sendable {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+
+            // Cancel the inner Task when the stream consumer stops listening.
+            continuation.onTermination = { @Sendable _ in
+                task.cancel()
             }
         }
     }

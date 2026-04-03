@@ -13,11 +13,8 @@ struct ProjectDetailView: View {
     var onOpen: (() -> Void)?
     var onDelete: (() -> Void)?
 
-    /// Deterministic color based on tag string hash.
     private func tagColor(for tag: String) -> Color {
-        let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .red, .mint, .cyan]
-        let index = abs(tag.hashValue) % colors.count
-        return colors[index]
+        AppColors.color(for: tag)
     }
 
     var body: some View {

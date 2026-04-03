@@ -17,17 +17,17 @@ final class AppState: ObservableObject {
     @Published var generationHistoryIndex: Int = -1
 
     /// Current canvas size, updated by CanvasView via GeometryReader.
-    var canvasSize: CGSize = CGSize(width: 1024, height: 768)
+    @Published var canvasSize: CGSize = CGSize(width: 1024, height: 768)
 
     /// The current drawing, kept in sync by CanvasView.
-    var currentDrawing = PKDrawing()
+    @Published var currentDrawing = PKDrawing()
 
     /// The current project, set by the view layer so that generation records can be saved.
-    var currentProject: Project?
+    @Published var currentProject: Project?
 
-    /// Closure invoked after a successful conversion with the new Generation.
-    /// The view layer sets this to insert the record into the model context.
-    var onGenerationCreated: ((Generation) -> Void)?
+    /// Published when a new generation should be persisted.
+    /// ContentView observes this via `.onChange` to insert into the model context.
+    @Published var pendingGeneration: Generation?
 
     /// Whether the user can navigate back in generation history.
     var canGoBack: Bool {
@@ -134,7 +134,7 @@ final class AppState: ObservableObject {
         saveGeneration(result)
     }
 
-    /// Creates a `Generation` record and hands it to the view layer for persistence.
+    /// Creates a `Generation` record and publishes it for the view layer to persist.
     private func saveGeneration(_ result: GeneratedCode) {
         guard let project = currentProject else { return }
         let generation = Generation(
@@ -143,6 +143,6 @@ final class AppState: ObservableObject {
             drawingSnapshot: currentDrawing.dataRepresentation(),
             project: project
         )
-        onGenerationCreated?(generation)
+        pendingGeneration = generation
     }
 }

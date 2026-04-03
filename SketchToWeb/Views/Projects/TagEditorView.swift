@@ -145,11 +145,8 @@ struct TagEditorView: View {
         project.tags.removeAll { $0 == tag }
     }
 
-    /// Deterministic color based on tag string hash.
     private func tagColor(for tag: String) -> Color {
-        let colors: [Color] = [.blue, .purple, .orange, .green, .pink, .teal, .indigo, .red, .mint, .cyan]
-        let index = abs(tag.hashValue) % colors.count
-        return colors[index]
+        AppColors.color(for: tag)
     }
 }
 

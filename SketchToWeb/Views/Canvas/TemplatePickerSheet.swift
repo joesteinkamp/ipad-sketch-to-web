@@ -51,13 +51,29 @@ private struct TemplateCard: View {
     let canvasSize: CGSize
     let onSelect: () -> Void
 
+    /// Cached preview image to avoid regenerating on every view update.
+    @State private var previewImage: UIImage?
+
     var body: some View {
         Button(action: onSelect) {
             VStack(spacing: 12) {
                 // Preview thumbnail
-                templatePreview
-                    .frame(height: 160)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                Group {
+                    if let image = previewImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .background(Color.white)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                            )
+                    } else {
+                        Color.white
+                    }
+                }
+                .frame(height: 160)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
 
                 HStack {
                     Image(systemName: template.iconName)
@@ -71,22 +87,12 @@ private struct TemplateCard: View {
             .shadow(color: .black.opacity(0.08), radius: 6, y: 2)
         }
         .buttonStyle(.plain)
-    }
-
-    /// Renders the template PKDrawing as a small image preview.
-    @ViewBuilder
-    private var templatePreview: some View {
-        let previewSize = CGSize(width: 1024, height: 768)
-        let drawing = template.generator(previewSize)
-        let image = DrawingExporter.exportAsImage(drawing, canvasSize: previewSize)
-
-        Image(uiImage: image)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .background(Color.white)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-            )
+        .onAppear {
+            if previewImage == nil {
+                let previewSize = CGSize(width: 1024, height: 768)
+                let drawing = template.generator(previewSize)
+                previewImage = DrawingExporter.exportAsImage(drawing, canvasSize: previewSize)
+            }
+        }
     }
 }
