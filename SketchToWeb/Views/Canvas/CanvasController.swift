@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import PencilKit
 
 /// A lightweight controller that bridges SwiftUI actions to the PKCanvasView's Coordinator.

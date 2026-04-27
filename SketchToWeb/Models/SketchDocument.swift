@@ -15,9 +15,9 @@ struct SketchDocument {
 
     /// Renders the drawing on a white background at the specified scale.
     ///
-    /// - Parameter scale: The rendering scale factor. Defaults to the main screen scale.
+    /// - Parameter scale: The rendering scale factor. Defaults to 2.0 (Retina).
     /// - Returns: A `UIImage` of the drawing composited onto a white background.
-    func exportAsImage(scale: CGFloat = UIScreen.main.scale) -> UIImage {
+    func exportAsImage(scale: CGFloat = 2.0) -> UIImage {
         let rect = CGRect(origin: .zero, size: canvasSize)
 
         let renderer = UIGraphicsImageRenderer(size: canvasSize)
@@ -34,9 +34,9 @@ struct SketchDocument {
 
     /// Renders the drawing as PNG data suitable for upload or on-device processing.
     ///
-    /// - Parameter scale: The rendering scale factor. Defaults to the main screen scale.
+    /// - Parameter scale: The rendering scale factor. Defaults to 2.0 (Retina).
     /// - Returns: PNG-encoded `Data`, or `nil` if encoding fails.
-    func exportAsPNGData(scale: CGFloat = UIScreen.main.scale) -> Data? {
+    func exportAsPNGData(scale: CGFloat = 2.0) -> Data? {
         exportAsImage(scale: scale).pngData()
     }
 }
