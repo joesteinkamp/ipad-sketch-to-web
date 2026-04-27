@@ -52,6 +52,9 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
+        .errorBanner(appState.conversionError) {
+            appState.conversionError = nil
+        }
     }
 
     private func createNewProject() {
