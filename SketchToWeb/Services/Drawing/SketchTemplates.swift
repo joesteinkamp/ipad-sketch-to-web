@@ -365,10 +365,11 @@ enum SketchTemplates {
         let id = UUID()
         let name: String
         let iconName: String
-        let generator: (CGSize) -> PKDrawing
+        let generator: @MainActor (CGSize) -> PKDrawing
     }
 
     /// All available templates.
+    @MainActor
     static let all: [Template] = [
         Template(name: "Login Form", iconName: "person.crop.square", generator: loginForm),
         Template(name: "Dashboard", iconName: "chart.bar.doc.horizontal", generator: dashboard),
