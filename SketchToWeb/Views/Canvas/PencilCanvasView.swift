@@ -22,7 +22,10 @@ struct PencilCanvasView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> PKCanvasView {
         let canvasView = PKCanvasView()
-        canvasView.drawingPolicy = .pencilOnly
+        // Accept both Apple Pencil and finger input. `.pencilOnly` would reject
+        // every touch on the simulator (no pencil) and on iPads where users
+        // prefer finger sketching.
+        canvasView.drawingPolicy = .anyInput
         canvasView.backgroundColor = .white
         canvasView.isOpaque = true
         canvasView.delegate = context.coordinator

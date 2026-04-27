@@ -17,10 +17,14 @@ final class AppState: ObservableObject {
     @Published var generationHistoryIndex: Int = -1
 
     /// Current canvas size, updated by CanvasView via GeometryReader.
-    @Published var canvasSize: CGSize = CGSize(width: 1024, height: 768)
+    /// Not `@Published` — it's only read inside conversion methods and never
+    /// observed reactively. Publishing it during a layout pass causes
+    /// "Publishing changes from within view updates" warnings.
+    var canvasSize: CGSize = CGSize(width: 1024, height: 768)
 
-    /// The current drawing, kept in sync by CanvasView.
-    @Published var currentDrawing = PKDrawing()
+    /// The current drawing, kept in sync by CanvasView. Not `@Published` for
+    /// the same reason as `canvasSize`.
+    var currentDrawing = PKDrawing()
 
     /// The current project, set by the view layer so that generation records can be saved.
     @Published var currentProject: Project?
