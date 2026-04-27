@@ -111,7 +111,7 @@ private struct GenerationRow: View {
 
             if isActive {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.accent)
+                    .foregroundStyle(Color.accentColor)
             }
         }
         .padding(.vertical, 4)
