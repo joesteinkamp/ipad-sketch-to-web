@@ -34,9 +34,24 @@ final class AppState: ObservableObject {
     /// off the main actor. `nil` or empty means "no design system context".
     @Published var designSystemSnapshot: DesignSystemSnapshot?
 
+    /// The id of the design system currently driving generations. `"user"`
+    /// (the default) means the user's own design system; any other value
+    /// matches a `PublicDesignSystem.id` and applies that public system's
+    /// style fragment instead.
+    @Published var activeDesignSystemKey: String = PublicDesignSystem.userDesignSystemKey
+
+    /// Bundled catalog of public design systems available for comparison.
+    /// Loaded once on `AppState` init; failures are non-fatal and fall back
+    /// to an empty catalog (the toggle UI hides itself in that case).
+    let publicDesignSystemCatalog: [PublicDesignSystem]
+
     /// Published when a new generation should be persisted.
     /// ContentView observes this via `.onChange` to insert into the model context.
     @Published var pendingGeneration: Generation?
+
+    init() {
+        self.publicDesignSystemCatalog = (try? PublicDesignSystem.loadCatalog()) ?? []
+    }
 
     /// Whether the user can navigate back in generation history.
     var canGoBack: Bool {
@@ -57,6 +72,9 @@ final class AppState: ObservableObject {
         conversionError = nil
         streamingText = nil
 
+        let publicDS = publicDesignSystemForActiveKey()
+        let key = activeDesignSystemKey
+
         Task {
             do {
                 guard let apiKey = KeychainHelper.loadAPIKey(), !apiKey.isEmpty else {
@@ -68,13 +86,14 @@ final class AppState: ObservableObject {
                 for try await state in pipeline.convertStreaming(
                     drawing: currentDrawing,
                     canvasSize: canvasSize,
-                    designSystem: designSystemSnapshot
+                    designSystem: designSystemSnapshot,
+                    publicDesignSystem: publicDS
                 ) {
                     switch state {
                     case .generating(let partialText):
                         self.streamingText = partialText
                     case .completed(let result):
-                        self.pushGeneratedResult(result)
+                        self.pushGeneratedResult(result, designSystemKey: key)
                         self.streamingText = nil
                     }
                 }
@@ -97,6 +116,9 @@ final class AppState: ObservableObject {
         isRefining = true
         conversionError = nil
 
+        let publicDS = publicDesignSystemForActiveKey()
+        let key = activeDesignSystemKey
+
         Task {
             do {
                 guard let apiKey = KeychainHelper.loadAPIKey(), !apiKey.isEmpty else {
@@ -108,14 +130,51 @@ final class AppState: ObservableObject {
                     currentCode: currentCode,
                     annotationImage: annotationImage,
                     canvasSize: canvasSize,
-                    designSystem: designSystemSnapshot
+                    designSystem: designSystemSnapshot,
+                    publicDesignSystem: publicDS
                 )
-                self.pushGeneratedResult(result)
+                self.pushGeneratedResult(result, designSystemKey: key)
             } catch {
                 self.conversionError = error.localizedDescription
             }
             self.isRefining = false
         }
+    }
+
+    /// Switches the active design system, swapping the displayed result to a
+    /// cached generation for the same drawing if one exists, or kicking off a
+    /// fresh conversion otherwise.
+    ///
+    /// - Parameters:
+    ///   - key: The new active key (`"user"` or a public-DS id).
+    ///   - cachedGenerations: The current project's existing generations, in
+    ///     reverse-chronological order. Provided by the view layer (which
+    ///     owns the `@Query`) so `AppState` doesn't need a `ModelContext`.
+    func setActiveDesignSystem(_ key: String, cachedGenerations: [Generation]) {
+        guard key != activeDesignSystemKey else { return }
+        activeDesignSystemKey = key
+
+        // Look for an existing generation in this project that already used
+        // the new key. We don't restrict by drawing — the user's most recent
+        // result with that DS is good enough for an instant swap.
+        if let cached = cachedGenerations.first(where: { $0.designSystemKey == key }) {
+            generatedResult = GeneratedCode(
+                htmlPreview: cached.htmlPreview,
+                reactCode: cached.reactCode
+            )
+        } else {
+            // No cache hit: trigger a fresh conversion using the active drawing.
+            convertDrawing()
+        }
+    }
+
+    /// Resolves the active key against the bundled catalog. Returns `nil` for
+    /// the user-DS key or when the catalog couldn't be loaded.
+    func publicDesignSystemForActiveKey() -> PublicDesignSystem? {
+        guard activeDesignSystemKey != PublicDesignSystem.userDesignSystemKey else {
+            return nil
+        }
+        return publicDesignSystemCatalog.first { $0.id == activeDesignSystemKey }
     }
 
     /// Navigates to the previous version in generation history.
@@ -135,7 +194,10 @@ final class AppState: ObservableObject {
     // MARK: - Private Helpers
 
     /// Pushes a new result onto the history stack and updates the current result.
-    private func pushGeneratedResult(_ result: GeneratedCode) {
+    private func pushGeneratedResult(
+        _ result: GeneratedCode,
+        designSystemKey: String = PublicDesignSystem.userDesignSystemKey
+    ) {
         // If we navigated back and then generate a new result, discard forward history.
         if generationHistoryIndex < generationHistory.count - 1 {
             generationHistory = Array(generationHistory.prefix(generationHistoryIndex + 1))
@@ -145,16 +207,17 @@ final class AppState: ObservableObject {
         generatedResult = result
 
         // Persist the generation to the project's history.
-        saveGeneration(result)
+        saveGeneration(result, designSystemKey: designSystemKey)
     }
 
     /// Creates a `Generation` record and publishes it for the view layer to persist.
-    private func saveGeneration(_ result: GeneratedCode) {
+    private func saveGeneration(_ result: GeneratedCode, designSystemKey: String) {
         guard let project = currentProject else { return }
         let generation = Generation(
             htmlPreview: result.htmlPreview,
             reactCode: result.reactCode,
             drawingSnapshot: currentDrawing.dataRepresentation(),
+            designSystemKey: designSystemKey,
             project: project
         )
         pendingGeneration = generation

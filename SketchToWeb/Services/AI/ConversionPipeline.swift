@@ -60,13 +60,15 @@ final class AIConversionPipeline: Sendable {
     ///   - drawing: The PencilKit drawing to convert.
     ///   - canvasSize: The size of the canvas the drawing was created on.
     ///   - designSystem: Optional design-system snapshot to inject into the prompt.
+    ///   - publicDesignSystem: Optional public DS to imitate (e.g. Material 3).
     /// - Returns: A `GeneratedCode` value containing the HTML preview and React source.
     /// - Throws: `PipelineError` or `GeminiClient.GeminiError` on failure.
     @MainActor
     func convert(
         drawing: PKDrawing,
         canvasSize: CGSize,
-        designSystem: DesignSystemSnapshot? = nil
+        designSystem: DesignSystemSnapshot? = nil,
+        publicDesignSystem: PublicDesignSystem? = nil
     ) async throws -> GeneratedCode {
         // Step 1: Render the drawing onto a white background and export as PNG.
         let pngData = try renderDrawingAsPNG(drawing: drawing, canvasSize: canvasSize)
@@ -77,7 +79,8 @@ final class AIConversionPipeline: Sendable {
         // Step 3: Build prompts.
         let systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(
             components: components,
-            designSystem: designSystem
+            designSystem: designSystem,
+            publicDesignSystem: publicDesignSystem
         )
         let userPrompt = SketchAnalysisPrompt.buildUserPrompt()
 
@@ -102,12 +105,14 @@ final class AIConversionPipeline: Sendable {
     ///   - drawing: The PencilKit drawing to convert.
     ///   - canvasSize: The size of the canvas the drawing was created on.
     ///   - designSystem: Optional design-system snapshot to inject into the prompt.
+    ///   - publicDesignSystem: Optional public DS to imitate (e.g. Material 3).
     /// - Returns: An `AsyncThrowingStream` of `StreamingState` values.
     @MainActor
     func convertStreaming(
         drawing: PKDrawing,
         canvasSize: CGSize,
-        designSystem: DesignSystemSnapshot? = nil
+        designSystem: DesignSystemSnapshot? = nil,
+        publicDesignSystem: PublicDesignSystem? = nil
     ) -> AsyncThrowingStream<StreamingState, Error> {
         // Capture rendering and prompt construction on the main actor before entering the stream.
         let pngData: Data
@@ -119,7 +124,8 @@ final class AIConversionPipeline: Sendable {
             let components = try ComponentDefinition.loadCatalog()
             systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(
                 components: components,
-                designSystem: designSystem
+                designSystem: designSystem,
+                publicDesignSystem: publicDesignSystem
             )
             userPrompt = SketchAnalysisPrompt.buildUserPrompt()
         } catch {

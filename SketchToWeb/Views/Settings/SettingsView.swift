@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("selectedModel") private var selectedModel: String = "gemini-3.1-pro-preview"
     @AppStorage("autoConvertEnabled") private var autoConvertEnabled: Bool = true
     @AppStorage("showDrawingHints") private var showDrawingHints: Bool = true
+    @AppStorage("compareDesignSystemsEnabled") private var compareDesignSystemsEnabled: Bool = false
 
     private let availableModels = [
         "gemini-3.1-pro-preview",
@@ -118,10 +119,14 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.plain)
+
+            Toggle(isOn: $compareDesignSystemsEnabled) {
+                Label("Compare with public systems", systemImage: "rectangle.lefthalf.inset.filled")
+            }
         } header: {
             Text("Design System")
         } footer: {
-            Text("Add a DESIGN.md, link a repo, upload a zip, or paste notes — the conversion prompt will use this context.")
+            Text("Add a DESIGN.md, link a repo, upload a zip, or paste notes — the conversion prompt will use this context. Turn on comparison to toggle the preview between your design system and a public one (Material 3, Carbon, Polaris).")
         }
     }
 

@@ -160,6 +160,85 @@ final class SketchAnalysisPromptTests: XCTestCase {
         XCTAssertFalse(prompt.contains(huge))
     }
 
+    // MARK: - Public Design System Section
+
+    func testBuildSystemPromptOmitsPublicSectionForDefaultEntry() {
+        let shadcn = PublicDesignSystem(
+            id: "shadcn",
+            name: "shadcn/ui",
+            shortName: "shadcn",
+            description: "",
+            isDefault: true,
+            promptFragment: ""
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            publicDesignSystem: shadcn
+        )
+
+        XCTAssertFalse(prompt.contains("Comparison Design System"))
+    }
+
+    func testBuildSystemPromptIncludesPublicSectionForNonDefaultEntry() {
+        let material = PublicDesignSystem(
+            id: "material-3",
+            name: "Material 3",
+            shortName: "Material 3",
+            description: "",
+            isDefault: false,
+            promptFragment: "Use Material 3 elevation tokens."
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            publicDesignSystem: material
+        )
+
+        XCTAssertTrue(prompt.contains("# Comparison Design System: Material 3"))
+        XCTAssertTrue(prompt.contains("Use Material 3 elevation tokens."))
+    }
+
+    func testPublicSectionFollowsUserDesignSystemSection() {
+        let userDS = DesignSystemSnapshot(
+            companyBlurb: "Acme",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: nil,
+            sourceURLContent: nil,
+            zipExtractedContent: nil,
+            zipFilename: nil,
+            fontFileNames: [],
+            assetFileNames: []
+        )
+        let material = PublicDesignSystem(
+            id: "material-3",
+            name: "Material 3",
+            shortName: "Material 3",
+            description: "",
+            isDefault: false,
+            promptFragment: "Material 3 fragment."
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: userDS,
+            publicDesignSystem: material
+        )
+
+        guard
+            let userIdx = prompt.range(of: "# Design System Context")?.lowerBound,
+            let publicIdx = prompt.range(of: "# Comparison Design System: Material 3")?.lowerBound,
+            let layoutIdx = prompt.range(of: "# Layout Interpretation Rules")?.lowerBound
+        else {
+            XCTFail("Expected all three sections in prompt")
+            return
+        }
+        XCTAssertLessThan(userIdx, publicIdx, "User DS must come before public DS so user wins on conflicts")
+        XCTAssertLessThan(publicIdx, layoutIdx, "Public DS must come before layout rules")
+    }
+
     func testDesignSystemSectionPlacedBeforeLayoutRules() {
         let snapshot = DesignSystemSnapshot(
             companyBlurb: "Acme",

@@ -1,0 +1,34 @@
+[
+  {
+    "id": "shadcn",
+    "name": "shadcn/ui",
+    "shortName": "shadcn",
+    "description": "Default Tailwind + Radix-based design system the app already targets.",
+    "isDefault": true,
+    "promptFragment": ""
+  },
+  {
+    "id": "material-3",
+    "name": "Material 3",
+    "shortName": "Material 3",
+    "description": "Google's Material You design language. Strong elevation, ripple feedback, dynamic color, FAB-style emphasis.",
+    "isDefault": false,
+    "promptFragment": "Render this UI in Google's Material 3 (Material You) style. Apply: rounded corners using Material 3 shape tokens (extra-small 4px, small 8px, medium 12px, large 16px, extra-large 28px); a clearly elevated surface hierarchy with shadows on cards and dialogs; primary buttons as filled tonal buttons with high-contrast labels; secondary actions as text or outlined buttons; FAB-style affordances for primary screen actions when appropriate; bottom sheets and navigation bars instead of side-rails when the layout suggests mobile; Material's elevation overlays on dark surfaces. Use a Material-leaning color palette: a single primary hue with tonal variations, a complementary secondary, and on-surface text. Prefer Roboto or Roboto Flex via Google Fonts. The HTML preview can keep Tailwind but should visually mimic these Material 3 conventions; the React code may continue to use shadcn/ui components but with className overrides that approximate Material 3 (rounded-2xl, shadow-md/shadow-lg, larger touch targets ≥48px)."
+  },
+  {
+    "id": "carbon",
+    "name": "IBM Carbon",
+    "shortName": "Carbon",
+    "description": "IBM's enterprise-focused design system. Sharper corners, dense data layouts, restrained color, IBM Plex typography.",
+    "isDefault": false,
+    "promptFragment": "Render this UI in IBM's Carbon Design System style. Apply: sharp 0px or 2px corners on most controls; a restrained, mostly-neutral palette with a single accent (Carbon's #0F62FE blue is a safe default); dense, information-rich layouts with tighter spacing than Material; clearly tiered headings using IBM Plex Sans (or system-ui as fallback); buttons in primary/secondary/tertiary/ghost/danger variants with sharp edges; data tables with row dividers and zebra striping when tabular data is implied; left-aligned form labels above inputs; high-contrast focus rings. Avoid Material-style heavy shadows; use thin 1px borders and minimal elevation. Keep shadcn/ui component primitives but tighten radii (rounded-none or rounded-sm), use Carbon's blue for primary, and prefer text-sm density throughout."
+  },
+  {
+    "id": "polaris",
+    "name": "Shopify Polaris",
+    "shortName": "Polaris",
+    "description": "Shopify's commerce-oriented design system. Friendly tone, soft greens, generous card-based layouts.",
+    "isDefault": false,
+    "promptFragment": "Render this UI in Shopify's Polaris design system style. Apply: medium rounded corners (8px–12px) on cards and inputs; soft green-leaning primary actions (#008060 / #007F5F) with white labels; generous card-based layouts with white surfaces against a cool gray (#F6F6F7) background; clear section headings with generous spacing; subtle 1px borders on cards rather than heavy shadows; buttons in primary/secondary/plain variants; banners and notices for success/info/warning/critical states with colored left borders; descriptive helper text under inputs in a smaller, lighter weight; Inter or system-ui typography. Forms should feel tutorial-like and forgiving — labels above inputs, optional fields explicitly labeled, and inline validation hints. Keep shadcn/ui component primitives but use Polaris's commerce-friendly palette and card-heavy composition."
+  }
+]

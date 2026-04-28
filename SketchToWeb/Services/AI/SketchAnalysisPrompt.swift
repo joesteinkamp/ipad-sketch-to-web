@@ -11,10 +11,15 @@ enum SketchAnalysisPrompt {
     ///   - designSystem: Optional design-system snapshot. When non-nil and non-empty,
     ///     a "Design System Context" section is inserted before layout rules so the
     ///     model can match the user's brand, tokens, and conventions.
+    ///   - publicDesignSystem: Optional public design system to imitate (e.g.
+    ///     Material 3). When non-nil and not the catalog default, its
+    ///     `promptFragment` is appended *after* the user's design-system
+    ///     section so the user's brand still wins on conflicts.
     /// - Returns: A fully formed system prompt string.
     static func buildSystemPrompt(
         components: [ComponentDefinition],
-        designSystem: DesignSystemSnapshot? = nil
+        designSystem: DesignSystemSnapshot? = nil,
+        publicDesignSystem: PublicDesignSystem? = nil
     ) -> String {
         var prompt = """
         You are an expert UI developer who specializes in converting hand-drawn wireframe \
@@ -44,6 +49,10 @@ enum SketchAnalysisPrompt {
 
         if let designSystemSection = buildDesignSystemSection(designSystem) {
             prompt += "\n" + designSystemSection
+        }
+
+        if let publicSection = buildPublicDesignSystemSection(publicDesignSystem) {
+            prompt += "\n" + publicSection
         }
 
         prompt += """
@@ -159,6 +168,28 @@ enum SketchAnalysisPrompt {
         }
 
         return section
+    }
+
+    /// Renders the public-design-system section appended after the user's DS
+    /// guidance. Returns `nil` for the catalog default (`shadcn`) and for an
+    /// entry with an empty prompt fragment, so the prompt stays unchanged in
+    /// the no-comparison case.
+    static func buildPublicDesignSystemSection(_ publicDS: PublicDesignSystem?) -> String? {
+        guard let publicDS, !publicDS.isDefault, !publicDS.promptFragment.isEmpty else {
+            return nil
+        }
+        return """
+        # Comparison Design System: \(publicDS.name)
+        Apply the visual language of \(publicDS.name) to this generation. \
+        If it conflicts with the user's own design system above, the user's \
+        guidance still wins for brand-specific colors, copy, and tokens — but \
+        adopt this system's component shapes, spacing, elevation, and \
+        typography conventions.
+
+        \(publicDS.promptFragment)
+
+
+        """
     }
 
     private static func truncate(_ text: String, limit: Int) -> String {
