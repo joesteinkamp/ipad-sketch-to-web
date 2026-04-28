@@ -82,7 +82,9 @@ final class AppState: ObservableObject {
     /// - Parameters:
     ///   - annotationImage: PNG data of the composite screenshot with red annotations.
     ///   - canvasSize: The size of the preview area.
-    func refineResult(annotationImage: Data, canvasSize: CGSize) {
+    ///   - comments: Optional typed comments keyed to numbered pins drawn on the screenshot
+    ///     (e.g. `"Pin 1: change this to blue"`). Empty when the user only used freehand strokes.
+    func refineResult(annotationImage: Data, canvasSize: CGSize, comments: [String] = []) {
         guard !isRefining, let currentCode = generatedResult else { return }
 
         isRefining = true
@@ -98,7 +100,8 @@ final class AppState: ObservableObject {
                 let result = try await pipeline.refine(
                     currentCode: currentCode,
                     annotationImage: annotationImage,
-                    canvasSize: canvasSize
+                    canvasSize: canvasSize,
+                    comments: comments
                 )
                 self.pushGeneratedResult(result)
             } catch {

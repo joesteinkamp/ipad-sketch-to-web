@@ -35,7 +35,12 @@ Four components use UIViewRepresentable:
 
 ### Iterative Refinement
 
-`AnnotatablePreviewView` layers a transparent PencilKit canvas (red pen) over the web preview. "Refine" captures a composite screenshot (WKWebView snapshot + PencilKit strokes) and sends it to `RefinementPipeline` with the current code as context. Results push onto `AppState.generationHistory` with back/forward navigation.
+`AnnotatablePreviewView` is a state machine (`AnnotationMode`: `.idle`, `.draw`, `.comment`). The idle state shows a single "Annotate" entry button. Tapping it reveals a toolbar with a Draw / Comment segmented picker, a Refine button, an overflow menu (Clear all), and an X to exit back to idle.
+
+- **Draw mode** layers a transparent PencilKit canvas (red pen) over the web preview for freehand strokes.
+- **Comment mode** lets the user tap to drop numbered Figma-style pins (`PreviewComment`) and type detailed instructions inline. Pins persist across mode switches.
+
+"Refine" captures a composite screenshot (WKWebView snapshot + PencilKit strokes + numbered pin overlays) and sends it to `RefinementPipeline.refine(currentCode:annotationImage:canvasSize:comments:)` along with a `["Pin N: <text>"]` array describing each typed comment. Results push onto `AppState.generationHistory` with back/forward navigation.
 
 ### API Key Storage
 
