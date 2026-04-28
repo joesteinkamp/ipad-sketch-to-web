@@ -43,19 +43,22 @@ final class RefinementPipeline: Sendable {
     ///   - canvasSize: The size of the preview area.
     ///   - comments: Typed comments keyed to numbered pins on the screenshot. Each entry should
     ///     already be formatted like `"Pin 1: <user text>"`. Empty when the user only drew strokes.
+    ///   - designSystem: Optional design-system snapshot to inject into the prompt
+    ///     so refinements stay consistent with the user's brand and tokens.
     /// - Returns: An updated `GeneratedCode` reflecting the user's requested changes.
     /// - Throws: `RefinementError` or `GeminiClient.GeminiError` on failure.
     func refine(
         currentCode: GeneratedCode,
         annotationImage: Data,
         canvasSize: CGSize,
-        comments: [String] = []
+        comments: [String] = [],
+        designSystem: DesignSystemSnapshot? = nil
     ) async throws -> GeneratedCode {
         guard !annotationImage.isEmpty else {
             throw RefinementError.emptyAnnotationImage
         }
 
-        let systemPrompt = buildRefinementSystemPrompt()
+        let systemPrompt = buildRefinementSystemPrompt(designSystem: designSystem)
         let userPrompt = buildRefinementUserPrompt(
             currentCode: currentCode,
             canvasSize: canvasSize,
@@ -74,8 +77,8 @@ final class RefinementPipeline: Sendable {
 
     // MARK: - Prompt Construction
 
-    private func buildRefinementSystemPrompt() -> String {
-        """
+    private func buildRefinementSystemPrompt(designSystem: DesignSystemSnapshot? = nil) -> String {
+        var prompt = """
         You are refining an existing UI. The image shows the current UI with red annotations \
         drawn on top by the user using Apple Pencil.
 
@@ -127,6 +130,12 @@ final class RefinementPipeline: Sendable {
         - Ensure both values are valid strings with properly escaped characters.
         - The refined code should be a complete replacement, not a diff or partial update.
         """
+
+        if let section = SketchAnalysisPrompt.buildDesignSystemSection(designSystem) {
+            prompt += "\n\n" + section
+        }
+
+        return prompt
     }
 
     private func buildRefinementUserPrompt(
