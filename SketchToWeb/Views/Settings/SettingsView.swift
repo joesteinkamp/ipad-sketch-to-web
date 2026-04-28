@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var apiKey: String = ""
     @State private var connectionStatus: ConnectionStatus = .unknown
     @State private var isTesting = false
+    @State private var showingDesignSystem = false
 
     @AppStorage("selectedModel") private var selectedModel: String = "gemini-3.1-pro-preview"
     @AppStorage("autoConvertEnabled") private var autoConvertEnabled: Bool = true
@@ -25,6 +26,7 @@ struct SettingsView: View {
                 apiKeySection
                 modelSection
                 behaviorSection
+                designSystemSection
                 connectionSection
             }
             .navigationTitle("Settings")
@@ -38,6 +40,9 @@ struct SettingsView: View {
             }
             .onAppear {
                 apiKey = KeychainHelper.loadAPIKey() ?? ""
+            }
+            .sheet(isPresented: $showingDesignSystem) {
+                DesignSystemSetupView()
             }
         }
     }
@@ -93,6 +98,30 @@ struct SettingsView: View {
             Text("Behavior")
         } footer: {
             Text("Auto-convert sends your sketch to the AI after a 3-second drawing pause. Drawing hints show subtle badges guessing what component each shape might become.")
+        }
+    }
+
+    // MARK: - Design System
+
+    @ViewBuilder
+    private var designSystemSection: some View {
+        Section {
+            Button {
+                showingDesignSystem = true
+            } label: {
+                HStack {
+                    Label("Design System", systemImage: "square.on.square.dashed")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .buttonStyle(.plain)
+        } header: {
+            Text("Design System")
+        } footer: {
+            Text("Add a DESIGN.md, link a repo, upload a zip, or paste notes — the conversion prompt will use this context.")
         }
     }
 
