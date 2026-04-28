@@ -29,6 +29,27 @@ final class RefinementPipelineTests: XCTestCase {
         }
     }
 
+    func testRefineThrowsOnEmptyAnnotationImageWithComments() async {
+        // Empty image short-circuits even when comments are supplied.
+        let pipeline = RefinementPipeline(apiKey: "fake-key")
+        let code = GeneratedCode(htmlPreview: "<div>test</div>", reactCode: "function Test() {}")
+
+        do {
+            _ = try await pipeline.refine(
+                currentCode: code,
+                annotationImage: Data(),
+                canvasSize: CGSize(width: 1024, height: 768),
+                comments: ["Pin 1: make this blue"]
+            )
+            XCTFail("Expected RefinementError.emptyAnnotationImage")
+        } catch let error as RefinementPipeline.RefinementError {
+            if case .emptyAnnotationImage = error { return }
+            XCTFail("Expected .emptyAnnotationImage but got \(error)")
+        } catch {
+            // Network error is also acceptable.
+        }
+    }
+
     // MARK: - Error Descriptions
 
     func testRefinementErrorDescriptions() {
