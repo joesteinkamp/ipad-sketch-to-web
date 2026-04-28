@@ -74,21 +74,29 @@ final class AIConversionPipeline: Sendable {
         // Step 2: Load the component catalog.
         let components = try ComponentDefinition.loadCatalog()
 
-        // Step 3: Build prompts.
+        // Step 3: Detect any explicit user-written component labels. Best-effort —
+        // if recognition fails, proceed with no labels rather than blocking the conversion.
+        let labeledBoxes = await LabeledBoxDetector.detect(
+            drawing: drawing,
+            canvasSize: canvasSize,
+            catalog: components
+        )
+
+        // Step 4: Build prompts.
         let systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(
             components: components,
             designSystem: designSystem
         )
-        let userPrompt = SketchAnalysisPrompt.buildUserPrompt()
+        let userPrompt = SketchAnalysisPrompt.buildUserPrompt(labeledBoxes: labeledBoxes)
 
-        // Step 4: Send to Gemini API.
+        // Step 5: Send to Gemini API.
         let responseText = try await client.sendMessage(
             systemPrompt: systemPrompt,
             imageData: pngData,
             userText: userPrompt
         )
 
-        // Step 5: Parse the response.
+        // Step 6: Parse the response.
         let generatedCode = try CodeGenerationResponse.parse(responseText)
         return generatedCode
     }
@@ -108,8 +116,10 @@ final class AIConversionPipeline: Sendable {
         drawing: PKDrawing,
         canvasSize: CGSize,
         designSystem: DesignSystemSnapshot? = nil
-    ) -> AsyncThrowingStream<StreamingState, Error> {
-        // Capture rendering and prompt construction on the main actor before entering the stream.
+    ) async -> AsyncThrowingStream<StreamingState, Error> {
+        // Render, load catalog, and run OCR-based label detection on the main actor
+        // *before* constructing the stream. This keeps the non-Sendable PKDrawing
+        // off the Task closure — only Sendable values (Data, String) are captured below.
         let pngData: Data
         let systemPrompt: String
         let userPrompt: String
@@ -117,11 +127,16 @@ final class AIConversionPipeline: Sendable {
         do {
             pngData = try renderDrawingAsPNG(drawing: drawing, canvasSize: canvasSize)
             let components = try ComponentDefinition.loadCatalog()
+            let labeledBoxes = await LabeledBoxDetector.detect(
+                drawing: drawing,
+                canvasSize: canvasSize,
+                catalog: components
+            )
             systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(
                 components: components,
                 designSystem: designSystem
             )
-            userPrompt = SketchAnalysisPrompt.buildUserPrompt()
+            userPrompt = SketchAnalysisPrompt.buildUserPrompt(labeledBoxes: labeledBoxes)
         } catch {
             return AsyncThrowingStream { $0.finish(throwing: error) }
         }

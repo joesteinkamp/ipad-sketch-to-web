@@ -65,7 +65,7 @@ final class AppState: ObservableObject {
                 let model = UserDefaults.standard.string(forKey: "selectedModel") ?? "gemini-3.1-pro-preview"
                 let pipeline = AIConversionPipeline(apiKey: apiKey, model: model)
 
-                for try await state in pipeline.convertStreaming(
+                for try await state in await pipeline.convertStreaming(
                     drawing: currentDrawing,
                     canvasSize: canvasSize,
                     designSystem: designSystemSnapshot
