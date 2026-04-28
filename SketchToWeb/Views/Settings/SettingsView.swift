@@ -12,6 +12,12 @@ struct SettingsView: View {
     @AppStorage("selectedModel") private var selectedModel: String = "gemini-3.1-pro-preview"
     @AppStorage("autoConvertEnabled") private var autoConvertEnabled: Bool = true
     @AppStorage("showDrawingHints") private var showDrawingHints: Bool = true
+    @AppStorage("defaultDesignDestination") private var defaultDesignDestination: String = DesignDestination.figma.rawValue
+
+    @EnvironmentObject private var appState: AppState
+
+    @State private var isConnectingFigma = false
+    @State private var figmaError: String?
 
     private let availableModels = [
         "gemini-3.1-pro-preview",
@@ -25,6 +31,7 @@ struct SettingsView: View {
                 apiKeySection
                 modelSection
                 behaviorSection
+                designToolsSection
                 connectionSection
             }
             .navigationTitle("Settings")
@@ -93,6 +100,64 @@ struct SettingsView: View {
             Text("Behavior")
         } footer: {
             Text("Auto-convert sends your sketch to the AI after a 3-second drawing pause. Drawing hints show subtle badges guessing what component each shape might become.")
+        }
+    }
+
+    // MARK: - Design Tools
+
+    @ViewBuilder
+    private var designToolsSection: some View {
+        Section {
+            HStack {
+                Label("Figma", systemImage: "rectangle.connected.to.line.below")
+                Spacer()
+                if isConnectingFigma {
+                    ProgressView().controlSize(.small)
+                } else if appState.figmaConnected {
+                    Label("Connected", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.subheadline)
+                    Button("Disconnect", role: .destructive) {
+                        appState.disconnectFigma()
+                        figmaError = nil
+                    }
+                    .buttonStyle(.borderless)
+                } else {
+                    Button("Connect") {
+                        connectFigma()
+                    }
+                    .buttonStyle(.borderless)
+                }
+            }
+
+            if let figmaError = figmaError {
+                Label(figmaError, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                    .font(.footnote)
+            }
+
+            Picker("Default destination", selection: $defaultDesignDestination) {
+                ForEach(DesignDestination.allCases.filter(\.isAvailable)) { destination in
+                    Text(destination.displayName).tag(destination.rawValue)
+                }
+            }
+        } header: {
+            Text("Design Tools")
+        } footer: {
+            Text("Connect a design tool to send your sketch and generated code into a real, editable design. Figma uses its remote MCP server (mcp.figma.com).")
+        }
+    }
+
+    private func connectFigma() {
+        isConnectingFigma = true
+        figmaError = nil
+        Task {
+            do {
+                try await appState.connectFigma()
+            } catch {
+                figmaError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            isConnectingFigma = false
         }
     }
 

@@ -94,4 +94,72 @@ enum KeychainHelper {
     static func deleteAPIKey() -> Bool {
         delete(key: apiKeyAccount)
     }
+
+    // MARK: - String Convenience
+
+    /// Persists a UTF-8 string under the given keychain key.
+    @discardableResult
+    static func saveString(_ value: String, key: String) -> Bool {
+        guard let data = value.data(using: .utf8) else { return false }
+        return save(key: key, data: data)
+    }
+
+    /// Loads a UTF-8 string from the keychain for the given key.
+    static func loadString(key: String) -> String? {
+        guard let data = load(key: key) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    // MARK: - OAuth Token Bundle
+
+    /// A persisted OAuth token bundle (access + refresh + expiry) for a remote
+    /// MCP destination. Stored as JSON under three keychain keys defined by the
+    /// destination's `KeychainKeys` namespace.
+    struct OAuthTokenBundle: Codable, Sendable {
+        var accessToken: String
+        var refreshToken: String?
+        /// Expiry as seconds since epoch.
+        var expiresAt: TimeInterval?
+    }
+
+    /// Saves an OAuth token bundle for the given destination.
+    @discardableResult
+    static func saveOAuthTokens(_ bundle: OAuthTokenBundle, for destination: DesignDestination) -> Bool {
+        let keys = destination.keychainKeys
+        let accessOK = saveString(bundle.accessToken, key: keys.accessToken)
+        let refreshOK: Bool
+        if let refresh = bundle.refreshToken {
+            refreshOK = saveString(refresh, key: keys.refreshToken)
+        } else {
+            delete(key: keys.refreshToken)
+            refreshOK = true
+        }
+        let expiryOK: Bool
+        if let expiresAt = bundle.expiresAt {
+            expiryOK = saveString(String(expiresAt), key: keys.expiry)
+        } else {
+            delete(key: keys.expiry)
+            expiryOK = true
+        }
+        return accessOK && refreshOK && expiryOK
+    }
+
+    /// Loads the OAuth token bundle for the given destination, if present.
+    static func loadOAuthTokens(for destination: DesignDestination) -> OAuthTokenBundle? {
+        let keys = destination.keychainKeys
+        guard let access = loadString(key: keys.accessToken) else { return nil }
+        let refresh = loadString(key: keys.refreshToken)
+        let expiresAt = loadString(key: keys.expiry).flatMap(TimeInterval.init)
+        return OAuthTokenBundle(accessToken: access, refreshToken: refresh, expiresAt: expiresAt)
+    }
+
+    /// Removes all OAuth tokens for the given destination.
+    @discardableResult
+    static func deleteOAuthTokens(for destination: DesignDestination) -> Bool {
+        let keys = destination.keychainKeys
+        let a = delete(key: keys.accessToken)
+        let r = delete(key: keys.refreshToken)
+        let e = delete(key: keys.expiry)
+        return a && r && e
+    }
 }
