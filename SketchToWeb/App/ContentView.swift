@@ -4,6 +4,7 @@ import SwiftData
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
+    @Query(sort: \DesignSystem.createdAt) private var designSystems: [DesignSystem]
     @State private var selectedProject: Project?
     @State private var showingSettings = false
 
@@ -46,8 +47,12 @@ struct ContentView: View {
             guard let generation else { return }
             modelContext.insert(generation)
         }
+        .onChange(of: designSystems.first?.updatedAt) { _, _ in
+            updateDesignSystemSnapshot()
+        }
         .onAppear {
             appState.currentProject = selectedProject
+            updateDesignSystemSnapshot()
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
@@ -61,6 +66,13 @@ struct ContentView: View {
         let project = Project(name: "Untitled Sketch")
         modelContext.insert(project)
         selectedProject = project
+    }
+
+    /// Pushes a snapshot of the current design system into `AppState` so the
+    /// pipelines can read it without touching SwiftData off the main actor.
+    private func updateDesignSystemSnapshot() {
+        let snapshot = designSystems.first?.snapshot()
+        appState.designSystemSnapshot = (snapshot?.isEmpty ?? true) ? nil : snapshot
     }
 }
 

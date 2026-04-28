@@ -10,6 +10,6 @@ struct SketchToWebApp: App {
             ContentView()
                 .environmentObject(appState)
         }
-        .modelContainer(for: [Project.self, ProjectFolder.self, Generation.self])
+        .modelContainer(for: [Project.self, ProjectFolder.self, Generation.self, DesignSystem.self])
     }
 }

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-iPadOS app (Swift/SwiftUI, iOS 17+) that lets users sketch UI wireframes with Apple Pencil and converts them into coded websites using shadcn/ui components via Google's Gemini vision API. Zero external dependencies — uses only system frameworks (PencilKit, WebKit, SwiftData, Security).
+iPadOS app (Swift/SwiftUI, iOS 17+) that lets users sketch UI wireframes with Apple Pencil and converts them into coded websites using shadcn/ui components via Google's Gemini vision API. System frameworks only (PencilKit, WebKit, SwiftData, Security) plus a single SPM dependency: [ZIPFoundation](https://github.com/weichsel/ZIPFoundation) (MIT) used by the design-system zip importer.
 
 ## Architecture
 
@@ -13,11 +13,11 @@ iPadOS app (Swift/SwiftUI, iOS 17+) that lets users sketch UI wireframes with Ap
 ### Key Layers
 
 - **App/** — Entry point (`SketchToWebApp`), root layout (`ContentView` with `NavigationSplitView`), and `AppState` (ObservableObject holding conversion state, streaming text, generation history, refinement state)
-- **Models/** — `Project` (SwiftData @Model with folder/tags/generations relationships), `ProjectFolder`, `Generation` (persisted version history), `GeneratedCode` (Codable struct with htmlPreview + reactCode), `ComponentDefinition` (loaded from bundled JSON catalog)
+- **Models/** — `Project` (SwiftData @Model with folder/tags/generations relationships), `ProjectFolder`, `Generation` (persisted version history), `GeneratedCode` (Codable struct with htmlPreview + reactCode), `ComponentDefinition` (loaded from bundled JSON catalog), `DesignSystem` (singleton SwiftData @Model storing company blurb, DESIGN.md content, source URL, zip extract, fonts/assets) + `DesignSystemSnapshot` (Sendable plain-struct copy used by pipelines)
 - **Views/Canvas/** — `PencilCanvasView` (UIViewRepresentable bridging PKCanvasView), `CanvasView` (main drawing screen with auto-save, auto-convert, drawing hints), `CanvasToolbar`, `TextToSketchSheet` (AI-generated wireframes from text descriptions), `TemplatePickerSheet` (pre-built layout starters), `DrawingHintOverlay` (real-time shape recognition badges)
 - **Views/Preview/** — `AnnotatablePreviewView` (PencilKit overlay on WKWebView for iterative refinement), `ResponsivePreviewView` (phone/tablet/desktop device frames), `WebPreviewView`, `CodePreviewView`, `PreviewContainerView` (tabbed container with version history navigation), `GenerationHistoryView` (timeline of all generations per project)
 - **Views/Projects/** — `ProjectListView` (sectioned by folders, searchable, drag-and-drop), `ProjectDetailView` (with tags), `TagEditorView` (chip-based tag editor with autocomplete)
-- **Services/AI/** — `GeminiClient` (URLSession HTTP client with streaming SSE support), `SketchAnalysisPrompt`, `CodeGenerationResponse` (JSON parser with regex fallback), `AIConversionPipeline` (orchestrator with streaming), `RefinementPipeline` (iterative annotation-based refinement)
+- **Services/AI/** — `GeminiClient` (URLSession HTTP client with streaming SSE support), `SketchAnalysisPrompt`, `CodeGenerationResponse` (JSON parser with regex fallback), `AIConversionPipeline` (orchestrator with streaming), `RefinementPipeline` (iterative annotation-based refinement), `DesignSystemImporter` (raw-URL fetch for GitHub/GitLab/Bitbucket + zip extraction via ZIPFoundation + sandbox file persistence)
 - **Services/Drawing/** — `DrawingExporter`, `SketchTemplates` (5 pre-built wireframe templates), `StrokeAnalyzer` (shape recognition for hint badges)
 - **Services/Storage/** — `KeychainHelper` (API key in Keychain), `ProjectStore` (SwiftData operations)
 

@@ -29,6 +29,11 @@ final class AppState: ObservableObject {
     /// The current project, set by the view layer so that generation records can be saved.
     @Published var currentProject: Project?
 
+    /// Snapshot of the active design system. Pushed in by `ContentView` via a
+    /// `@Query` observer so the pipelines can read it without touching SwiftData
+    /// off the main actor. `nil` or empty means "no design system context".
+    @Published var designSystemSnapshot: DesignSystemSnapshot?
+
     /// Published when a new generation should be persisted.
     /// ContentView observes this via `.onChange` to insert into the model context.
     @Published var pendingGeneration: Generation?
@@ -60,7 +65,11 @@ final class AppState: ObservableObject {
                 let model = UserDefaults.standard.string(forKey: "selectedModel") ?? "gemini-3.1-pro-preview"
                 let pipeline = AIConversionPipeline(apiKey: apiKey, model: model)
 
-                for try await state in await pipeline.convertStreaming(drawing: currentDrawing, canvasSize: canvasSize) {
+                for try await state in await pipeline.convertStreaming(
+                    drawing: currentDrawing,
+                    canvasSize: canvasSize,
+                    designSystem: designSystemSnapshot
+                ) {
                     switch state {
                     case .generating(let partialText):
                         self.streamingText = partialText
@@ -98,7 +107,8 @@ final class AppState: ObservableObject {
                 let result = try await pipeline.refine(
                     currentCode: currentCode,
                     annotationImage: annotationImage,
-                    canvasSize: canvasSize
+                    canvasSize: canvasSize,
+                    designSystem: designSystemSnapshot
                 )
                 self.pushGeneratedResult(result)
             } catch {

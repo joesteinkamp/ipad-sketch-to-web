@@ -59,10 +59,15 @@ final class AIConversionPipeline: Sendable {
     /// - Parameters:
     ///   - drawing: The PencilKit drawing to convert.
     ///   - canvasSize: The size of the canvas the drawing was created on.
+    ///   - designSystem: Optional design-system snapshot to inject into the prompt.
     /// - Returns: A `GeneratedCode` value containing the HTML preview and React source.
     /// - Throws: `PipelineError` or `GeminiClient.GeminiError` on failure.
     @MainActor
-    func convert(drawing: PKDrawing, canvasSize: CGSize) async throws -> GeneratedCode {
+    func convert(
+        drawing: PKDrawing,
+        canvasSize: CGSize,
+        designSystem: DesignSystemSnapshot? = nil
+    ) async throws -> GeneratedCode {
         // Step 1: Render the drawing onto a white background and export as PNG.
         let pngData = try renderDrawingAsPNG(drawing: drawing, canvasSize: canvasSize)
 
@@ -78,7 +83,10 @@ final class AIConversionPipeline: Sendable {
         )
 
         // Step 4: Build prompts.
-        let systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(components: components)
+        let systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: components,
+            designSystem: designSystem
+        )
         let userPrompt = SketchAnalysisPrompt.buildUserPrompt(labeledBoxes: labeledBoxes)
 
         // Step 5: Send to Gemini API.
@@ -101,9 +109,14 @@ final class AIConversionPipeline: Sendable {
     /// - Parameters:
     ///   - drawing: The PencilKit drawing to convert.
     ///   - canvasSize: The size of the canvas the drawing was created on.
+    ///   - designSystem: Optional design-system snapshot to inject into the prompt.
     /// - Returns: An `AsyncThrowingStream` of `StreamingState` values.
     @MainActor
-    func convertStreaming(drawing: PKDrawing, canvasSize: CGSize) async -> AsyncThrowingStream<StreamingState, Error> {
+    func convertStreaming(
+        drawing: PKDrawing,
+        canvasSize: CGSize,
+        designSystem: DesignSystemSnapshot? = nil
+    ) async -> AsyncThrowingStream<StreamingState, Error> {
         // Render, load catalog, and run OCR-based label detection on the main actor
         // *before* constructing the stream. This keeps the non-Sendable PKDrawing
         // off the Task closure — only Sendable values (Data, String) are captured below.
@@ -119,7 +132,10 @@ final class AIConversionPipeline: Sendable {
                 canvasSize: canvasSize,
                 catalog: components
             )
-            systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(components: components)
+            systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(
+                components: components,
+                designSystem: designSystem
+            )
             userPrompt = SketchAnalysisPrompt.buildUserPrompt(labeledBoxes: labeledBoxes)
         } catch {
             return AsyncThrowingStream { $0.finish(throwing: error) }
