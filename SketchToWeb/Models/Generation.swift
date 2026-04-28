@@ -15,12 +15,21 @@ final class Generation {
     /// Compressed (gzipped) PencilKit drawing data.
     var drawingSnapshot: Data
 
+    /// Identifies which design system produced this generation. Defaults to
+    /// `"user"` (the user's own design system from the setup sheet); other
+    /// values match the `id` of an entry in the public design-system catalog
+    /// (e.g. `"material-3"`). Used by the toggle in `PreviewContainerView`
+    /// to find a cached generation for a given sketch + DS pair before
+    /// triggering a fresh API call.
+    var designSystemKey: String = PublicDesignSystem.userDesignSystemKey
+
     var project: Project?
 
     init(
         htmlPreview: String,
         reactCode: String,
         drawingSnapshot: Data,
+        designSystemKey: String = PublicDesignSystem.userDesignSystemKey,
         project: Project? = nil
     ) {
         self.id = UUID()
@@ -28,6 +37,7 @@ final class Generation {
         self.htmlPreview = htmlPreview
         self.reactCode = reactCode
         self.drawingSnapshot = Generation.compress(drawingSnapshot)
+        self.designSystemKey = designSystemKey
         self.project = project
     }
 

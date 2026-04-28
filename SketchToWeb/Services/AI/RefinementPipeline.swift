@@ -49,13 +49,17 @@ final class RefinementPipeline: Sendable {
         currentCode: GeneratedCode,
         annotationImage: Data,
         canvasSize: CGSize,
-        designSystem: DesignSystemSnapshot? = nil
+        designSystem: DesignSystemSnapshot? = nil,
+        publicDesignSystem: PublicDesignSystem? = nil
     ) async throws -> GeneratedCode {
         guard !annotationImage.isEmpty else {
             throw RefinementError.emptyAnnotationImage
         }
 
-        let systemPrompt = buildRefinementSystemPrompt(designSystem: designSystem)
+        let systemPrompt = buildRefinementSystemPrompt(
+            designSystem: designSystem,
+            publicDesignSystem: publicDesignSystem
+        )
         let userPrompt = buildRefinementUserPrompt(currentCode: currentCode, canvasSize: canvasSize)
 
         let responseText = try await client.sendMessage(
@@ -70,7 +74,10 @@ final class RefinementPipeline: Sendable {
 
     // MARK: - Prompt Construction
 
-    private func buildRefinementSystemPrompt(designSystem: DesignSystemSnapshot? = nil) -> String {
+    private func buildRefinementSystemPrompt(
+        designSystem: DesignSystemSnapshot? = nil,
+        publicDesignSystem: PublicDesignSystem? = nil
+    ) -> String {
         var prompt = """
         You are refining an existing UI. The image shows the current UI with red annotations \
         drawn on top by the user using Apple Pencil.
@@ -122,6 +129,10 @@ final class RefinementPipeline: Sendable {
 
         if let section = SketchAnalysisPrompt.buildDesignSystemSection(designSystem) {
             prompt += "\n\n" + section
+        }
+
+        if let publicSection = SketchAnalysisPrompt.buildPublicDesignSystemSection(publicDesignSystem) {
+            prompt += "\n\n" + publicSection
         }
 
         return prompt

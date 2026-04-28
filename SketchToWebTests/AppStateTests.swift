@@ -140,6 +140,83 @@ final class AppStateTests: XCTestCase {
         XCTAssertFalse(state.isRefining)
     }
 
+    // MARK: - Design System Toggle
+
+    func testInitialDesignSystemKeyIsUser() {
+        let state = AppState()
+        XCTAssertEqual(state.activeDesignSystemKey, PublicDesignSystem.userDesignSystemKey)
+    }
+
+    func testCatalogIsLoadedFromBundle() {
+        let state = AppState()
+        XCTAssertFalse(state.publicDesignSystemCatalog.isEmpty)
+    }
+
+    func testPublicDesignSystemForActiveKeyReturnsNilForUserKey() {
+        let state = AppState()
+        XCTAssertNil(state.publicDesignSystemForActiveKey())
+    }
+
+    func testPublicDesignSystemForActiveKeyResolvesNonDefaultEntry() {
+        let state = AppState()
+        guard let target = state.publicDesignSystemCatalog.first(where: { !$0.isDefault }) else {
+            return XCTFail("Expected at least one non-default catalog entry")
+        }
+        state.activeDesignSystemKey = target.id
+        XCTAssertEqual(state.publicDesignSystemForActiveKey()?.id, target.id)
+    }
+
+    func testSetActiveDesignSystemSwapsToCachedGenerationWhenAvailable() {
+        let state = AppState()
+
+        let cached = Generation(
+            htmlPreview: "<div>material</div>",
+            reactCode: "function Material() {}",
+            drawingSnapshot: Data(),
+            designSystemKey: "material-3"
+        )
+
+        state.setActiveDesignSystem("material-3", cachedGenerations: [cached])
+
+        XCTAssertEqual(state.activeDesignSystemKey, "material-3")
+        XCTAssertEqual(state.generatedResult?.htmlPreview, "<div>material</div>")
+        XCTAssertEqual(state.generatedResult?.reactCode, "function Material() {}")
+        // Cache hit must NOT trigger a regeneration.
+        XCTAssertFalse(state.isConverting)
+    }
+
+    func testSetActiveDesignSystemNoOpsWhenKeyUnchanged() {
+        let state = AppState()
+        state.generatedResult = makeCode("untouched")
+        state.activeDesignSystemKey = "material-3"
+
+        state.setActiveDesignSystem("material-3", cachedGenerations: [])
+
+        XCTAssertEqual(state.generatedResult?.htmlPreview, "<div>untouched</div>")
+        XCTAssertFalse(state.isConverting)
+    }
+
+    func testSetActiveDesignSystemPrefersExactKeyMatchOverWrongKey() {
+        let state = AppState()
+
+        let userGen = Generation(
+            htmlPreview: "<div>user</div>",
+            reactCode: "f() {}",
+            drawingSnapshot: Data(),
+            designSystemKey: PublicDesignSystem.userDesignSystemKey
+        )
+        let materialGen = Generation(
+            htmlPreview: "<div>material</div>",
+            reactCode: "g() {}",
+            drawingSnapshot: Data(),
+            designSystemKey: "material-3"
+        )
+
+        state.setActiveDesignSystem("material-3", cachedGenerations: [userGen, materialGen])
+
+        XCTAssertEqual(state.generatedResult?.htmlPreview, "<div>material</div>")
+    }
+
     // MARK: - Helpers
 
     private func makeCode(_ label: String) -> GeneratedCode {

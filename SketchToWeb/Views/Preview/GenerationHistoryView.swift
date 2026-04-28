@@ -17,10 +17,13 @@ struct GenerationHistoryView: View {
     /// The id of the generation currently loaded in the preview.
     @State private var activeGenerationID: UUID?
 
-    // Filter generations to the current project.
+    // Filter generations to the current project AND the active design-system
+    // key so the timeline doesn't mix shadcn / Material / Carbon results
+    // together. The preview's toggle owns the key; this view just reflects it.
     private var generations: [Generation] {
-        allGenerations
-            .filter { $0.project?.id == project.id }
+        let key = appState.activeDesignSystemKey
+        return allGenerations
+            .filter { $0.project?.id == project.id && $0.designSystemKey == key }
             .sorted { $0.createdAt > $1.createdAt }
     }
 

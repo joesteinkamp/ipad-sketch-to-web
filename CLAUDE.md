@@ -13,7 +13,7 @@ iPadOS app (Swift/SwiftUI, iOS 17+) that lets users sketch UI wireframes with Ap
 ### Key Layers
 
 - **App/** — Entry point (`SketchToWebApp`), root layout (`ContentView` with `NavigationSplitView`), and `AppState` (ObservableObject holding conversion state, streaming text, generation history, refinement state)
-- **Models/** — `Project` (SwiftData @Model with folder/tags/generations relationships), `ProjectFolder`, `Generation` (persisted version history), `GeneratedCode` (Codable struct with htmlPreview + reactCode), `ComponentDefinition` (loaded from bundled JSON catalog), `DesignSystem` (singleton SwiftData @Model storing company blurb, DESIGN.md content, source URL, zip extract, fonts/assets) + `DesignSystemSnapshot` (Sendable plain-struct copy used by pipelines)
+- **Models/** — `Project` (SwiftData @Model with folder/tags/generations relationships), `ProjectFolder`, `Generation` (persisted version history; carries `designSystemKey` so toggling between DSes doesn't mix outputs), `GeneratedCode` (Codable struct with htmlPreview + reactCode), `ComponentDefinition` (loaded from bundled JSON catalog), `DesignSystem` (singleton SwiftData @Model storing company blurb, DESIGN.md content, source URL, zip extract, fonts/assets) + `DesignSystemSnapshot` (Sendable plain-struct copy used by pipelines), `PublicDesignSystem` (Codable catalog entry; bundled `public-design-systems.json` ships shadcn/Material 3/Carbon/Polaris)
 - **Views/Canvas/** — `PencilCanvasView` (UIViewRepresentable bridging PKCanvasView), `CanvasView` (main drawing screen with auto-save, auto-convert, drawing hints), `CanvasToolbar`, `TextToSketchSheet` (AI-generated wireframes from text descriptions), `TemplatePickerSheet` (pre-built layout starters), `DrawingHintOverlay` (real-time shape recognition badges)
 - **Views/Preview/** — `AnnotatablePreviewView` (PencilKit overlay on WKWebView for iterative refinement), `ResponsivePreviewView` (phone/tablet/desktop device frames), `WebPreviewView`, `CodePreviewView`, `PreviewContainerView` (tabbed container with version history navigation), `GenerationHistoryView` (timeline of all generations per project)
 - **Views/Projects/** — `ProjectListView` (sectioned by folders, searchable, drag-and-drop), `ProjectDetailView` (with tags), `TagEditorView` (chip-based tag editor with autocomplete)
@@ -67,9 +67,12 @@ Run tests via Xcode's Test navigator or `xcodebuild test`.
 
 - `Resources/component-catalog.json` — 20 shadcn/ui component definitions with sketch patterns, import paths, and usage examples. This drives the prompt system.
 - `Resources/preview-template.html` — standalone HTML template with Tailwind CDN and shadcn/ui CSS variables + component styles.
+- `Resources/public-design-systems.json` — comparison-target catalog (shadcn = default, Material 3, IBM Carbon, Shopify Polaris). Each entry carries a `promptFragment` appended to the system prompt when active.
 
 ## User Preferences (AppStorage keys)
 
 - `selectedModel` — Gemini model ID
 - `autoConvertEnabled` — auto-convert after 3s drawing pause
 - `showDrawingHints` — shape recognition badge overlay
+- `compareDesignSystemsEnabled` — show the "Yours / public DS" segmented toggle in `PreviewContainerView`
+- `activePublicDesignSystemID` — last-used comparison target (e.g. `material-3`)
