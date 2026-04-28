@@ -90,8 +90,30 @@ enum SketchAnalysisPrompt {
 
     /// Builds the user-facing prompt that accompanies the wireframe image.
     ///
+    /// - Parameter labeledBoxes: Boxes the user explicitly tagged by writing a component name
+    ///   inside them. When non-empty, an authoritative-labels section is appended so the
+    ///   model treats those classifications as ground truth.
     /// - Returns: A concise instruction string for the user message.
-    static func buildUserPrompt() -> String {
-        "Convert this hand-drawn wireframe sketch into a web UI. Analyze each element and map it to the appropriate shadcn/ui component. Return valid JSON."
+    static func buildUserPrompt(labeledBoxes: [LabeledBoxDetector.LabeledBox] = []) -> String {
+        let base = "Convert this hand-drawn wireframe sketch into a web UI. Analyze each element and map it to the appropriate shadcn/ui component. Return valid JSON."
+
+        guard !labeledBoxes.isEmpty else { return base }
+
+        var labelSection = """
+
+
+        # User-provided labels
+        The user has explicitly labeled the following components by writing the component name inside the box. Treat these as ground truth — do not reclassify these elements:
+        """
+
+        for box in labeledBoxes {
+            let x = Int(box.bounds.origin.x.rounded())
+            let y = Int(box.bounds.origin.y.rounded())
+            let w = Int(box.bounds.width.rounded())
+            let h = Int(box.bounds.height.rounded())
+            labelSection += "\n- Box at (x:\(x), y:\(y), w:\(w), h:\(h)): \(box.componentName)"
+        }
+
+        return base + labelSection
     }
 }

@@ -60,7 +60,7 @@ final class AppState: ObservableObject {
                 let model = UserDefaults.standard.string(forKey: "selectedModel") ?? "gemini-3.1-pro-preview"
                 let pipeline = AIConversionPipeline(apiKey: apiKey, model: model)
 
-                for try await state in pipeline.convertStreaming(drawing: currentDrawing, canvasSize: canvasSize) {
+                for try await state in await pipeline.convertStreaming(drawing: currentDrawing, canvasSize: canvasSize) {
                     switch state {
                     case .generating(let partialText):
                         self.streamingText = partialText
