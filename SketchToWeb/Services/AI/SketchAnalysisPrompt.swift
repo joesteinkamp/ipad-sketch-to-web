@@ -6,9 +6,16 @@ enum SketchAnalysisPrompt {
     /// Builds the system prompt that instructs the model how to interpret sketches and
     /// produce shadcn/ui component code.
     ///
-    /// - Parameter components: The component catalog describing available shadcn/ui components.
+    /// - Parameters:
+    ///   - components: The component catalog describing available shadcn/ui components.
+    ///   - designSystem: Optional design-system snapshot. When non-nil and non-empty,
+    ///     a "Design System Context" section is inserted before layout rules so the
+    ///     model can match the user's brand, tokens, and conventions.
     /// - Returns: A fully formed system prompt string.
-    static func buildSystemPrompt(components: [ComponentDefinition]) -> String {
+    static func buildSystemPrompt(
+        components: [ComponentDefinition],
+        designSystem: DesignSystemSnapshot? = nil
+    ) -> String {
         var prompt = """
         You are an expert UI developer who specializes in converting hand-drawn wireframe \
         sketches into production-quality web interfaces using shadcn/ui components and Tailwind CSS.
@@ -33,6 +40,10 @@ enum SketchAnalysisPrompt {
             - **Example**: `\(component.exampleUsage)`
 
             """
+        }
+
+        if let designSystemSection = buildDesignSystemSection(designSystem) {
+            prompt += "\n" + designSystemSection
         }
 
         prompt += """
@@ -93,5 +104,66 @@ enum SketchAnalysisPrompt {
     /// - Returns: A concise instruction string for the user message.
     static func buildUserPrompt() -> String {
         "Convert this hand-drawn wireframe sketch into a web UI. Analyze each element and map it to the appropriate shadcn/ui component. Return valid JSON."
+    }
+
+    /// Renders the design-system context as a prompt section. Returns `nil` when
+    /// the snapshot is missing or empty so callers can omit the section entirely
+    /// rather than emit an empty header.
+    ///
+    /// Long source content is truncated per-source so a single oversized import
+    /// doesn't crowd out the rest of the prompt.
+    static func buildDesignSystemSection(_ designSystem: DesignSystemSnapshot?) -> String? {
+        guard let ds = designSystem, !ds.isEmpty else { return nil }
+
+        var section = """
+        # Design System Context
+        Apply the following project-specific design guidance. When it conflicts \
+        with shadcn/ui defaults, prefer this guidance for colors, typography, \
+        spacing, and tone — but keep the underlying shadcn/ui component structure.
+
+
+        """
+
+        if !ds.companyBlurb.isEmpty {
+            section += "## About\n\(ds.companyBlurb)\n\n"
+        }
+
+        if let markdown = ds.markdownContent, !markdown.isEmpty {
+            let label = ds.markdownFilename ?? "DESIGN.md"
+            section += "## Design Doc (`\(label)`)\n\(truncate(markdown, limit: 6000))\n\n"
+        }
+
+        if let urlText = ds.sourceURLContent, !urlText.isEmpty {
+            let label = ds.sourceURL ?? "source"
+            section += "## From \(label)\n\(truncate(urlText, limit: 4000))\n\n"
+        }
+
+        if let zipText = ds.zipExtractedContent, !zipText.isEmpty {
+            let label = ds.zipFilename ?? "imported archive"
+            section += "## From `\(label)`\n\(truncate(zipText, limit: 6000))\n\n"
+        }
+
+        if !ds.fontFileNames.isEmpty || !ds.assetFileNames.isEmpty {
+            section += "## Available Assets\n"
+            if !ds.fontFileNames.isEmpty {
+                section += "- Fonts: \(ds.fontFileNames.joined(separator: ", "))\n"
+            }
+            if !ds.assetFileNames.isEmpty {
+                section += "- Logos/assets: \(ds.assetFileNames.joined(separator: ", "))\n"
+            }
+            section += "\n"
+        }
+
+        if !ds.notes.isEmpty {
+            section += "## Additional Notes\n\(ds.notes)\n\n"
+        }
+
+        return section
+    }
+
+    private static func truncate(_ text: String, limit: Int) -> String {
+        guard text.count > limit else { return text }
+        let endIndex = text.index(text.startIndex, offsetBy: limit)
+        return String(text[..<endIndex]) + "\n\n... [truncated]"
     }
 }
