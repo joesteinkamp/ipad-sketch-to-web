@@ -29,6 +29,11 @@ final class AppState: ObservableObject {
     /// The current project, set by the view layer so that generation records can be saved.
     @Published var currentProject: Project?
 
+    /// Snapshot of the active design system. Pushed in by `ContentView` via a
+    /// `@Query` observer so the pipelines can read it without touching SwiftData
+    /// off the main actor. `nil` or empty means "no design system context".
+    @Published var designSystemSnapshot: DesignSystemSnapshot?
+
     /// Published when a new generation should be persisted.
     /// ContentView observes this via `.onChange` to insert into the model context.
     @Published var pendingGeneration: Generation?
@@ -70,7 +75,11 @@ final class AppState: ObservableObject {
                 let model = UserDefaults.standard.string(forKey: "selectedModel") ?? "gemini-3.1-pro-preview"
                 let pipeline = AIConversionPipeline(apiKey: apiKey, model: model)
 
-                for try await state in pipeline.convertStreaming(drawing: currentDrawing, canvasSize: canvasSize) {
+                for try await state in await pipeline.convertStreaming(
+                    drawing: currentDrawing,
+                    canvasSize: canvasSize,
+                    designSystem: designSystemSnapshot
+                ) {
                     switch state {
                     case .generating(let partialText):
                         self.streamingText = partialText
@@ -92,7 +101,9 @@ final class AppState: ObservableObject {
     /// - Parameters:
     ///   - annotationImage: PNG data of the composite screenshot with red annotations.
     ///   - canvasSize: The size of the preview area.
-    func refineResult(annotationImage: Data, canvasSize: CGSize) {
+    ///   - comments: Optional typed comments keyed to numbered pins drawn on the screenshot
+    ///     (e.g. `"Pin 1: change this to blue"`). Empty when the user only used freehand strokes.
+    func refineResult(annotationImage: Data, canvasSize: CGSize, comments: [String] = []) {
         guard !isRefining, let currentCode = generatedResult else { return }
 
         isRefining = true
@@ -108,7 +119,9 @@ final class AppState: ObservableObject {
                 let result = try await pipeline.refine(
                     currentCode: currentCode,
                     annotationImage: annotationImage,
-                    canvasSize: canvasSize
+                    canvasSize: canvasSize,
+                    comments: comments,
+                    designSystem: designSystemSnapshot
                 )
                 self.pushGeneratedResult(result)
             } catch {

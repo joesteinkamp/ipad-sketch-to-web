@@ -39,17 +39,31 @@ final class RefinementPipeline: Sendable {
     ///
     /// - Parameters:
     ///   - currentCode: The current `GeneratedCode` that the user is refining.
-    ///   - annotationImage: PNG data of the composite screenshot (web preview + red annotations).
+    ///   - annotationImage: PNG data of the composite screenshot (web preview + red annotations + numbered pins).
     ///   - canvasSize: The size of the preview area.
+    ///   - comments: Typed comments keyed to numbered pins on the screenshot. Each entry should
+    ///     already be formatted like `"Pin 1: <user text>"`. Empty when the user only drew strokes.
+    ///   - designSystem: Optional design-system snapshot to inject into the prompt
+    ///     so refinements stay consistent with the user's brand and tokens.
     /// - Returns: An updated `GeneratedCode` reflecting the user's requested changes.
     /// - Throws: `RefinementError` or `GeminiClient.GeminiError` on failure.
-    func refine(currentCode: GeneratedCode, annotationImage: Data, canvasSize: CGSize) async throws -> GeneratedCode {
+    func refine(
+        currentCode: GeneratedCode,
+        annotationImage: Data,
+        canvasSize: CGSize,
+        comments: [String] = [],
+        designSystem: DesignSystemSnapshot? = nil
+    ) async throws -> GeneratedCode {
         guard !annotationImage.isEmpty else {
             throw RefinementError.emptyAnnotationImage
         }
 
-        let systemPrompt = buildRefinementSystemPrompt()
-        let userPrompt = buildRefinementUserPrompt(currentCode: currentCode, canvasSize: canvasSize)
+        let systemPrompt = buildRefinementSystemPrompt(designSystem: designSystem)
+        let userPrompt = buildRefinementUserPrompt(
+            currentCode: currentCode,
+            canvasSize: canvasSize,
+            comments: comments
+        )
 
         let responseText = try await client.sendMessage(
             systemPrompt: systemPrompt,
@@ -63,8 +77,8 @@ final class RefinementPipeline: Sendable {
 
     // MARK: - Prompt Construction
 
-    private func buildRefinementSystemPrompt() -> String {
-        """
+    private func buildRefinementSystemPrompt(designSystem: DesignSystemSnapshot? = nil) -> String {
+        var prompt = """
         You are refining an existing UI. The image shows the current UI with red annotations \
         drawn on top by the user using Apple Pencil.
 
@@ -82,6 +96,10 @@ final class RefinementPipeline: Sendable {
         - **Red X marks or strikethrough**: The user wants that element removed.
         - **Red lines or boxes** drawn where no element exists: The user wants a new element \
         added in that location.
+        - **Numbered red pins** (filled red circles labeled 1, 2, 3, …): The user dropped a pin \
+        at a specific location and provided a typed comment for it. The user-provided text for \
+        each pin is supplied separately in the user message — match the pin number in the image \
+        to the corresponding "Pin N: …" line and apply the requested change at that location.
 
         # Rules
         - Preserve ALL existing UI elements and styling that are NOT annotated.
@@ -112,14 +130,38 @@ final class RefinementPipeline: Sendable {
         - Ensure both values are valid strings with properly escaped characters.
         - The refined code should be a complete replacement, not a diff or partial update.
         """
+
+        if let section = SketchAnalysisPrompt.buildDesignSystemSection(designSystem) {
+            prompt += "\n\n" + section
+        }
+
+        return prompt
     }
 
-    private func buildRefinementUserPrompt(currentCode: GeneratedCode, canvasSize: CGSize) -> String {
-        """
+    private func buildRefinementUserPrompt(
+        currentCode: GeneratedCode,
+        canvasSize: CGSize,
+        comments: [String]
+    ) -> String {
+        let commentsBlock: String
+        if comments.isEmpty {
+            commentsBlock = ""
+        } else {
+            commentsBlock = """
+
+
+            I also dropped numbered red pins on the preview with the following typed comments. \
+            Match each comment to the pin with the same number visible in the image:
+
+            \(comments.joined(separator: "\n"))
+            """
+        }
+
+        return """
         The image shows my current UI preview with red annotations I drew on top to indicate \
         changes I want. Please refine the code based on my annotations.
 
-        The preview area is \(Int(canvasSize.width))x\(Int(canvasSize.height)) points.
+        The preview area is \(Int(canvasSize.width))x\(Int(canvasSize.height)) points.\(commentsBlock)
 
         Here is the current React code that generated the preview shown in the image:
 

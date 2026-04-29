@@ -59,28 +59,44 @@ final class AIConversionPipeline: Sendable {
     /// - Parameters:
     ///   - drawing: The PencilKit drawing to convert.
     ///   - canvasSize: The size of the canvas the drawing was created on.
+    ///   - designSystem: Optional design-system snapshot to inject into the prompt.
     /// - Returns: A `GeneratedCode` value containing the HTML preview and React source.
     /// - Throws: `PipelineError` or `GeminiClient.GeminiError` on failure.
     @MainActor
-    func convert(drawing: PKDrawing, canvasSize: CGSize) async throws -> GeneratedCode {
+    func convert(
+        drawing: PKDrawing,
+        canvasSize: CGSize,
+        designSystem: DesignSystemSnapshot? = nil
+    ) async throws -> GeneratedCode {
         // Step 1: Render the drawing onto a white background and export as PNG.
         let pngData = try renderDrawingAsPNG(drawing: drawing, canvasSize: canvasSize)
 
         // Step 2: Load the component catalog.
         let components = try ComponentDefinition.loadCatalog()
 
-        // Step 3: Build prompts.
-        let systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(components: components)
-        let userPrompt = SketchAnalysisPrompt.buildUserPrompt()
+        // Step 3: Detect any explicit user-written component labels. Best-effort —
+        // if recognition fails, proceed with no labels rather than blocking the conversion.
+        let labeledBoxes = await LabeledBoxDetector.detect(
+            drawing: drawing,
+            canvasSize: canvasSize,
+            catalog: components
+        )
 
-        // Step 4: Send to Gemini API.
+        // Step 4: Build prompts.
+        let systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: components,
+            designSystem: designSystem
+        )
+        let userPrompt = SketchAnalysisPrompt.buildUserPrompt(labeledBoxes: labeledBoxes)
+
+        // Step 5: Send to Gemini API.
         let responseText = try await client.sendMessage(
             systemPrompt: systemPrompt,
             imageData: pngData,
             userText: userPrompt
         )
 
-        // Step 5: Parse the response.
+        // Step 6: Parse the response.
         let generatedCode = try CodeGenerationResponse.parse(responseText)
         return generatedCode
     }
@@ -93,10 +109,17 @@ final class AIConversionPipeline: Sendable {
     /// - Parameters:
     ///   - drawing: The PencilKit drawing to convert.
     ///   - canvasSize: The size of the canvas the drawing was created on.
+    ///   - designSystem: Optional design-system snapshot to inject into the prompt.
     /// - Returns: An `AsyncThrowingStream` of `StreamingState` values.
     @MainActor
-    func convertStreaming(drawing: PKDrawing, canvasSize: CGSize) -> AsyncThrowingStream<StreamingState, Error> {
-        // Capture rendering and prompt construction on the main actor before entering the stream.
+    func convertStreaming(
+        drawing: PKDrawing,
+        canvasSize: CGSize,
+        designSystem: DesignSystemSnapshot? = nil
+    ) async -> AsyncThrowingStream<StreamingState, Error> {
+        // Render, load catalog, and run OCR-based label detection on the main actor
+        // *before* constructing the stream. This keeps the non-Sendable PKDrawing
+        // off the Task closure — only Sendable values (Data, String) are captured below.
         let pngData: Data
         let systemPrompt: String
         let userPrompt: String
@@ -104,8 +127,16 @@ final class AIConversionPipeline: Sendable {
         do {
             pngData = try renderDrawingAsPNG(drawing: drawing, canvasSize: canvasSize)
             let components = try ComponentDefinition.loadCatalog()
-            systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(components: components)
-            userPrompt = SketchAnalysisPrompt.buildUserPrompt()
+            let labeledBoxes = await LabeledBoxDetector.detect(
+                drawing: drawing,
+                canvasSize: canvasSize,
+                catalog: components
+            )
+            systemPrompt = SketchAnalysisPrompt.buildSystemPrompt(
+                components: components,
+                designSystem: designSystem
+            )
+            userPrompt = SketchAnalysisPrompt.buildUserPrompt(labeledBoxes: labeledBoxes)
         } catch {
             return AsyncThrowingStream { $0.finish(throwing: error) }
         }
