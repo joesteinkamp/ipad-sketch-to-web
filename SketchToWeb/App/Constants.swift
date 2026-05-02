@@ -1,5 +1,21 @@
 import SwiftUI
 
+// MARK: - App Constants
+
+enum AppConstants {
+    /// OAuth client ID for the Figma app registered at developers.figma.com.
+    /// Override at build time by setting `FIGMA_OAUTH_CLIENT_ID` in the bundle's
+    /// Info.plist; otherwise falls back to the placeholder so the project still
+    /// compiles for contributors who haven't registered an OAuth app yet.
+    static var figmaOAuthClientID: String {
+        if let id = Bundle.main.object(forInfoDictionaryKey: "FIGMA_OAUTH_CLIENT_ID") as? String,
+           !id.isEmpty {
+            return id
+        }
+        return "REPLACE_WITH_FIGMA_CLIENT_ID"
+    }
+}
+
 // MARK: - Timing Constants
 
 enum TimingConstants {
