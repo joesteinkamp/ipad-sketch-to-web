@@ -173,7 +173,7 @@ struct SettingsView: View {
         } header: {
             Text("Design Tools")
         } footer: {
-            Text("Connect a design tool to send your sketch and generated code into a real, editable design. Figma uses its remote MCP server (mcp.figma.com).")
+            Text("Connect a design tool to send your sketch and generated code into a real, editable design. Tap Connect to sign in to Figma in a browser sheet — no developer app or API key required.")
         }
     }
 

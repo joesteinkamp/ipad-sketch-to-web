@@ -162,4 +162,39 @@ enum KeychainHelper {
         let e = delete(key: keys.expiry)
         return a && r && e
     }
+
+    // MARK: - OAuth Client Registration
+
+    /// Result of MCP OAuth discovery (RFC 9728) plus Dynamic Client Registration
+    /// (RFC 7591). Persisted so subsequent connects can skip discovery + DCR and
+    /// jump straight into the authorization-code flow.
+    struct OAuthClientRegistration: Codable, Sendable {
+        var clientID: String
+        var authorizationEndpoint: URL
+        var tokenEndpoint: URL
+        var registrationEndpoint: URL?
+        /// Resource URL to bind the access token to (RFC 8707).
+        var resource: URL?
+        /// Scopes advertised by the authorization server. May be empty.
+        var supportedScopes: [String]
+    }
+
+    /// Saves a client registration for the given destination.
+    @discardableResult
+    static func saveOAuthRegistration(_ registration: OAuthClientRegistration, for destination: DesignDestination) -> Bool {
+        guard let data = try? JSONEncoder().encode(registration) else { return false }
+        return save(key: destination.keychainKeys.registration, data: data)
+    }
+
+    /// Loads the persisted client registration for the given destination, if present.
+    static func loadOAuthRegistration(for destination: DesignDestination) -> OAuthClientRegistration? {
+        guard let data = load(key: destination.keychainKeys.registration) else { return nil }
+        return try? JSONDecoder().decode(OAuthClientRegistration.self, from: data)
+    }
+
+    /// Removes the persisted client registration for the given destination.
+    @discardableResult
+    static func deleteOAuthRegistration(for destination: DesignDestination) -> Bool {
+        delete(key: destination.keychainKeys.registration)
+    }
 }

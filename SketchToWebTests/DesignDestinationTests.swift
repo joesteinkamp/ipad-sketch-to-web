@@ -10,12 +10,9 @@ final class DesignDestinationTests: XCTestCase {
         )
     }
 
-    func testFigmaOAuthConfig() {
-        let config = DesignDestination.figma.oauthConfig
-        XCTAssertEqual(config.authorizeURL.host, "www.figma.com")
-        XCTAssertEqual(config.tokenURL.absoluteString, "https://www.figma.com/api/oauth/token")
-        XCTAssertEqual(config.redirectURI, "sketchtoweb://oauth/figma")
-        XCTAssertFalse(config.scopes.isEmpty)
+    func testFigmaOAuthRedirectAndClientName() {
+        XCTAssertEqual(DesignDestination.figma.oauthRedirectURI, "sketchtoweb://oauth/figma")
+        XCTAssertFalse(DesignDestination.figma.oauthClientName.isEmpty)
     }
 
     func testFigmaKeychainKeysAreNamespaced() {
@@ -23,8 +20,8 @@ final class DesignDestinationTests: XCTestCase {
         XCTAssertTrue(keys.accessToken.contains("figma"))
         XCTAssertTrue(keys.refreshToken.contains("figma"))
         XCTAssertTrue(keys.expiry.contains("figma"))
-        XCTAssertNotEqual(keys.accessToken, keys.refreshToken)
-        XCTAssertNotEqual(keys.accessToken, keys.expiry)
+        XCTAssertTrue(keys.registration.contains("figma"))
+        XCTAssertEqual(Set([keys.accessToken, keys.refreshToken, keys.expiry, keys.registration]).count, 4)
     }
 
     func testAllCasesIncludesFigma() {
