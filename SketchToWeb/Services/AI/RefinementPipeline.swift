@@ -25,12 +25,19 @@ final class RefinementPipeline: Sendable {
 
     // MARK: - Properties
 
-    let client: GeminiClient
+    let client: any GeminiAPI
 
     // MARK: - Initialization
 
-    init(apiKey: String, model: String = "gemini-3.1-pro-preview") {
-        self.client = GeminiClient(apiKey: apiKey, model: model)
+    /// Creates a refinement pipeline with an injected client. Tests should use this initializer
+    /// to substitute a mock; production code should call `live(apiKey:model:)` instead.
+    init(client: any GeminiAPI) {
+        self.client = client
+    }
+
+    /// Convenience factory that wires up a real `GeminiClient` for production use.
+    static func live(apiKey: String, model: String = "gemini-3.1-pro-preview") -> RefinementPipeline {
+        RefinementPipeline(client: GeminiClient(apiKey: apiKey, model: model))
     }
 
     // MARK: - Refinement

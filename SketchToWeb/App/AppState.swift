@@ -6,15 +6,12 @@ import Combine
 final class AppState: ObservableObject {
     @Published var isConverting = false
     @Published var isRefining = false
-    @Published var conversionError: String?
+    @Published var error: AppError?
     @Published var generatedResult: GeneratedCode?
     @Published var streamingText: String?
 
     /// History of generated code versions for back/forward navigation.
-    @Published var generationHistory: [GeneratedCode] = []
-
-    /// Index into `generationHistory` pointing to the currently displayed version.
-    @Published var generationHistoryIndex: Int = -1
+    @Published private(set) var history = GenerationHistory()
 
     /// Current canvas size, updated by CanvasView via GeometryReader.
     /// Not `@Published` — it's only read inside conversion methods and never
@@ -38,15 +35,48 @@ final class AppState: ObservableObject {
     /// ContentView observes this via `.onChange` to insert into the model context.
     @Published var pendingGeneration: Generation?
 
+    // MARK: - Source-Compatible Bridges
+
+    /// Read-only bridge so existing views (`PreviewContainerView`) keep compiling.
+    var generationHistory: [GeneratedCode] { history.versions }
+
+    /// Read-only bridge so existing views keep compiling.
+    var generationHistoryIndex: Int { history.index }
+
     /// Whether the user can navigate back in generation history.
-    var canGoBack: Bool {
-        generationHistoryIndex > 0
-    }
+    var canGoBack: Bool { history.canGoBack }
 
     /// Whether the user can navigate forward in generation history.
-    var canGoForward: Bool {
-        generationHistoryIndex < generationHistory.count - 1
+    var canGoForward: Bool { history.canGoForward }
+
+    /// Read/clear bridge for `ContentView`'s error banner. Setting to `nil`
+    /// clears the underlying typed error; non-nil writes are ignored.
+    var conversionError: String? {
+        get { error?.errorDescription }
+        set { if newValue == nil { error = nil } }
     }
+
+    // MARK: - Dependencies
+
+    typealias ConversionPipelineFactory = @MainActor (String, String) -> AIConversionPipeline
+    typealias RefinementPipelineFactory = @Sendable (String, String) -> RefinementPipeline
+    typealias APIKeyProvider = @Sendable () -> String?
+
+    private let makeConversionPipeline: ConversionPipelineFactory
+    private let makeRefinementPipeline: RefinementPipelineFactory
+    private let apiKeyProvider: APIKeyProvider
+
+    init(
+        makeConversionPipeline: @escaping ConversionPipelineFactory = { AIConversionPipeline.live(apiKey: $0, model: $1) },
+        makeRefinementPipeline: @escaping RefinementPipelineFactory = { RefinementPipeline.live(apiKey: $0, model: $1) },
+        apiKeyProvider: @escaping APIKeyProvider = { KeychainHelper.loadAPIKey() }
+    ) {
+        self.makeConversionPipeline = makeConversionPipeline
+        self.makeRefinementPipeline = makeRefinementPipeline
+        self.apiKeyProvider = apiKeyProvider
+    }
+
+    // MARK: - Conversion
 
     /// Converts the current drawing using the AI pipeline.
     /// Called from the toolbar's Convert button (no arguments needed).
@@ -54,21 +84,25 @@ final class AppState: ObservableObject {
         guard !isConverting else { return }
 
         isConverting = true
-        conversionError = nil
+        error = nil
         streamingText = nil
+
+        let drawing = currentDrawing
+        let canvasSize = canvasSize
+        let designSystem = designSystemSnapshot
 
         Task {
             do {
-                guard let apiKey = KeychainHelper.loadAPIKey(), !apiKey.isEmpty else {
-                    throw AIConversionPipeline.PipelineError.apiKeyMissing
+                guard let apiKey = apiKeyProvider(), !apiKey.isEmpty else {
+                    throw AppError.apiKeyMissing
                 }
                 let model = UserDefaults.standard.string(forKey: "selectedModel") ?? "gemini-3.1-pro-preview"
-                let pipeline = AIConversionPipeline(apiKey: apiKey, model: model)
+                let pipeline = makeConversionPipeline(apiKey, model)
 
                 for try await state in await pipeline.convertStreaming(
-                    drawing: currentDrawing,
+                    drawing: drawing,
                     canvasSize: canvasSize,
-                    designSystem: designSystemSnapshot
+                    designSystem: designSystem
                 ) {
                     switch state {
                     case .generating(let partialText):
@@ -79,7 +113,7 @@ final class AppState: ObservableObject {
                     }
                 }
             } catch {
-                self.conversionError = error.localizedDescription
+                self.error = AppError(error)
                 self.streamingText = nil
             }
             self.isConverting = false
@@ -97,57 +131,54 @@ final class AppState: ObservableObject {
         guard !isRefining, let currentCode = generatedResult else { return }
 
         isRefining = true
-        conversionError = nil
+        error = nil
+
+        let designSystem = designSystemSnapshot
 
         Task {
             do {
-                guard let apiKey = KeychainHelper.loadAPIKey(), !apiKey.isEmpty else {
-                    throw RefinementPipeline.RefinementError.apiKeyMissing
+                guard let apiKey = apiKeyProvider(), !apiKey.isEmpty else {
+                    throw AppError.apiKeyMissing
                 }
                 let model = UserDefaults.standard.string(forKey: "selectedModel") ?? "gemini-3.1-pro-preview"
-                let pipeline = RefinementPipeline(apiKey: apiKey, model: model)
+                let pipeline = makeRefinementPipeline(apiKey, model)
                 let result = try await pipeline.refine(
                     currentCode: currentCode,
                     annotationImage: annotationImage,
                     canvasSize: canvasSize,
                     comments: comments,
-                    designSystem: designSystemSnapshot
+                    designSystem: designSystem
                 )
                 self.pushGeneratedResult(result)
             } catch {
-                self.conversionError = error.localizedDescription
+                self.error = AppError(error)
             }
             self.isRefining = false
         }
     }
 
+    // MARK: - History Navigation
+
     /// Navigates to the previous version in generation history.
     func goBack() {
-        guard canGoBack else { return }
-        generationHistoryIndex -= 1
-        generatedResult = generationHistory[generationHistoryIndex]
+        if let previous = history.goBack() {
+            generatedResult = previous
+        }
     }
 
     /// Navigates to the next version in generation history.
     func goForward() {
-        guard canGoForward else { return }
-        generationHistoryIndex += 1
-        generatedResult = generationHistory[generationHistoryIndex]
+        if let next = history.goForward() {
+            generatedResult = next
+        }
     }
 
     // MARK: - Private Helpers
 
     /// Pushes a new result onto the history stack and updates the current result.
     private func pushGeneratedResult(_ result: GeneratedCode) {
-        // If we navigated back and then generate a new result, discard forward history.
-        if generationHistoryIndex < generationHistory.count - 1 {
-            generationHistory = Array(generationHistory.prefix(generationHistoryIndex + 1))
-        }
-        generationHistory.append(result)
-        generationHistoryIndex = generationHistory.count - 1
+        history.push(result)
         generatedResult = result
-
-        // Persist the generation to the project's history.
         saveGeneration(result)
     }
 
