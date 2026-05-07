@@ -8,6 +8,7 @@ struct PreviewContainerView: View {
 
     @State private var selectedTab: PreviewTab = .preview
     @State private var showingShareSheet = false
+    @State private var showingSendToDesign = false
 
     // MARK: - Tab Enum
 
@@ -66,7 +67,14 @@ struct PreviewContainerView: View {
                 }
             }
 
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    showingSendToDesign = true
+                } label: {
+                    Label("Send to Figma", systemImage: "rectangle.connected.to.line.below")
+                }
+                .disabled(appState.generatedResult == nil)
+
                 Button {
                     showingShareSheet = true
                 } label: {
@@ -79,6 +87,9 @@ struct PreviewContainerView: View {
             if let content = shareContent {
                 ActivityViewController(activityItems: [content])
             }
+        }
+        .sheet(isPresented: $showingSendToDesign) {
+            SendToDesignSheet()
         }
     }
 
