@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import CryptoKit
 
 /// Captures design-system context that augments the conversion prompt so the model
 /// produces output that matches the user's brand, tokens, and component conventions.
@@ -60,6 +61,19 @@ final class DesignSystem {
     /// `DesignSystemImporter.fetchPreset(slug:)` and cached on disk.
     var presetContent: String?
 
+    /// Distilled DESIGN.md produced by `DesignSystemSynthesizer`. When non-nil
+    /// and non-empty, this replaces the raw `sourceURLContent` and
+    /// `zipExtractedContent` blocks in the conversion prompt.
+    var synthesizedMarkdown: String?
+
+    /// Timestamp of the last successful synthesis.
+    var synthesizedAt: Date?
+
+    /// SHA-256 hex of the inputs that produced `synthesizedMarkdown`.
+    /// Compared against `currentInputFingerprint` to surface a "stale" badge
+    /// after the user changes inputs without re-synthesizing.
+    var synthesizedInputFingerprint: String?
+
     init(
         companyBlurb: String = "",
         notes: String = ""
@@ -82,6 +96,38 @@ final class DesignSystem {
         (presetContent?.isEmpty ?? true) &&
         fontFilePaths.isEmpty &&
         assetFilePaths.isEmpty
+    }
+
+    /// True when there's enough material for a synthesis call to be useful.
+    /// Mirrors `isEmpty` minus the empty check — synthesizing an empty design
+    /// system would produce nothing.
+    var hasSynthesisInputs: Bool { !isEmpty }
+
+    /// SHA-256 hex over the current set of synthesis inputs. Recomputed on
+    /// every read; cheap relative to the conversion calls that follow it.
+    var currentInputFingerprint: String {
+        DesignSystemFingerprint.compute(
+            companyBlurb: companyBlurb,
+            markdownContent: markdownContent,
+            sourceURL: sourceURL,
+            sourceURLContent: sourceURLContent,
+            zipFilename: zipFilename,
+            zipExtractedContent: zipExtractedContent,
+            presetSlug: presetSlug,
+            presetContent: presetContent,
+            notes: notes,
+            fontFilePaths: fontFilePaths,
+            assetFilePaths: assetFilePaths
+        )
+    }
+
+    /// True when a synthesis exists but its stored fingerprint no longer
+    /// matches the current inputs. Drives the "Out of date" badge in the
+    /// editor. Manual edits to `synthesizedMarkdown` itself don't mark this
+    /// stale — the fingerprint covers inputs, not the synthesis output.
+    var isSynthesisStale: Bool {
+        guard let synth = synthesizedMarkdown, !synth.isEmpty else { return false }
+        return synthesizedInputFingerprint != currentInputFingerprint
     }
 
     /// Fetches the single active design system, creating one if none exists.
@@ -120,7 +166,9 @@ final class DesignSystem {
             presetName: presetName,
             presetContent: presetContent,
             fontFileNames: fontFilePaths.map { ($0 as NSString).lastPathComponent },
-            assetFileNames: assetFilePaths.map { ($0 as NSString).lastPathComponent }
+            assetFileNames: assetFilePaths.map { ($0 as NSString).lastPathComponent },
+            synthesizedMarkdown: synthesizedMarkdown,
+            synthesizedAt: synthesizedAt
         )
     }
 }
@@ -142,6 +190,8 @@ struct DesignSystemSnapshot: Sendable, Equatable {
     var presetContent: String? = nil
     var fontFileNames: [String]
     var assetFileNames: [String]
+    var synthesizedMarkdown: String?
+    var synthesizedAt: Date?
 
     var isEmpty: Bool {
         companyBlurb.isEmpty &&
@@ -152,5 +202,79 @@ struct DesignSystemSnapshot: Sendable, Equatable {
         (presetContent?.isEmpty ?? true) &&
         fontFileNames.isEmpty &&
         assetFileNames.isEmpty
+    }
+}
+
+extension DesignSystemSnapshot {
+    /// Backwards-compatible initializer for tests and call sites that
+    /// predate the synthesis fields.
+    init(
+        companyBlurb: String,
+        notes: String,
+        markdownContent: String?,
+        markdownFilename: String?,
+        sourceURL: String?,
+        sourceURLContent: String?,
+        zipExtractedContent: String?,
+        zipFilename: String?,
+        fontFileNames: [String],
+        assetFileNames: [String]
+    ) {
+        self.init(
+            companyBlurb: companyBlurb,
+            notes: notes,
+            markdownContent: markdownContent,
+            markdownFilename: markdownFilename,
+            sourceURL: sourceURL,
+            sourceURLContent: sourceURLContent,
+            zipExtractedContent: zipExtractedContent,
+            zipFilename: zipFilename,
+            fontFileNames: fontFileNames,
+            assetFileNames: assetFileNames,
+            synthesizedMarkdown: nil,
+            synthesizedAt: nil
+        )
+    }
+}
+
+/// SHA-256 over the inputs that feed `DesignSystemSynthesizer`. Field names
+/// are wrapped in delimiters that won't appear in user content so adjacent
+/// fields can't collide (e.g. blurb ending with text that matches a URL).
+enum DesignSystemFingerprint {
+    static func compute(
+        companyBlurb: String,
+        markdownContent: String?,
+        sourceURL: String?,
+        sourceURLContent: String?,
+        zipFilename: String?,
+        zipExtractedContent: String?,
+        presetSlug: String?,
+        presetContent: String?,
+        notes: String,
+        fontFilePaths: [String],
+        assetFilePaths: [String]
+    ) -> String {
+        let parts: [String] = [
+            companyBlurb,
+            markdownContent ?? "",
+            sourceURL ?? "",
+            sourceURLContent ?? "",
+            zipFilename ?? "",
+            zipExtractedContent ?? "",
+            presetSlug ?? "",
+            presetContent ?? "",
+            notes,
+            fontFilePaths
+                .map { ($0 as NSString).lastPathComponent }
+                .sorted()
+                .joined(separator: ","),
+            assetFilePaths
+                .map { ($0 as NSString).lastPathComponent }
+                .sorted()
+                .joined(separator: ",")
+        ]
+        let joined = parts.joined(separator: "\n--FIELD--\n")
+        let digest = SHA256.hash(data: Data(joined.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

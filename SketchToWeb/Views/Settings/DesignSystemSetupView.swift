@@ -48,6 +48,7 @@ private struct DesignSystemEditorView: View {
                 headerSection
                 blurbSection
                 resourcesSection
+                synthesisSection
                 notesSection
             }
             .navigationTitle("Design System")
@@ -127,6 +128,31 @@ private struct DesignSystemEditorView: View {
             Text("Examples of your design system (all optional)")
         } footer: {
             Text("What works best: code and designs for your design system and your code products.")
+        }
+    }
+
+    @ViewBuilder
+    private var synthesisSection: some View {
+        Section {
+            synthesizeRow
+            if !(designSystem.synthesizedMarkdown ?? "").isEmpty {
+                synthesizedPreview
+            }
+        } header: {
+            HStack {
+                Text("Synthesized DESIGN.md")
+                Spacer()
+                if designSystem.isSynthesisStale {
+                    Text("Out of date")
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.orange.opacity(0.2), in: Capsule())
+                        .foregroundStyle(.orange)
+                }
+            }
+        } footer: {
+            Text("Distills the imports above into a focused DESIGN.md used in conversion prompts. Raw inputs stop being sent once synthesized.")
         }
     }
 
@@ -450,6 +476,103 @@ private struct DesignSystemEditorView: View {
         }
     }
 
+    // MARK: - Synthesis
+
+    @ViewBuilder
+    private var synthesizeRow: some View {
+        let hasInputs = designSystem.hasSynthesisInputs
+        let hasSynthesis = !(designSystem.synthesizedMarkdown ?? "").isEmpty
+        let isStale = designSystem.isSynthesisStale
+
+        HStack {
+            Label(
+                hasSynthesis ? "Regenerate from imports" : "Synthesize a DESIGN.md",
+                systemImage: "wand.and.stars"
+            )
+            Spacer()
+            if importTask == .synthesize {
+                ProgressView().controlSize(.small)
+            } else {
+                Button(hasSynthesis ? "Regenerate" : "Synthesize") {
+                    Task { await synthesize() }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                // Promote to a tinted prominent style when there's something
+                // actionable: nothing yet, or the existing synthesis is stale.
+                .tint((!hasSynthesis || isStale) ? .accentColor : nil)
+                .disabled(!hasInputs)
+            }
+        }
+        if !hasInputs {
+            Text("Add a blurb, URL, zip, or notes first.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private var synthesizedPreview: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextEditor(
+                text: Binding(
+                    get: { designSystem.synthesizedMarkdown ?? "" },
+                    set: {
+                        designSystem.synthesizedMarkdown = $0
+                        designSystem.updatedAt = Date()
+                    }
+                )
+            )
+            .font(.callout.monospaced())
+            .frame(minHeight: 200)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+            )
+
+            HStack {
+                if let date = designSystem.synthesizedAt {
+                    Text("Synthesized \(date.formatted(.relative(presentation: .named)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Clear", role: .destructive) {
+                    designSystem.synthesizedMarkdown = nil
+                    designSystem.synthesizedAt = nil
+                    designSystem.synthesizedInputFingerprint = nil
+                    designSystem.updatedAt = Date()
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+            }
+        }
+    }
+
+    private func synthesize() async {
+        importTask = .synthesize
+        defer { importTask = nil }
+
+        guard let key = KeychainHelper.loadAPIKey(), !key.isEmpty else {
+            importError = DesignSystemSynthesizer.SynthesisError.apiKeyMissing.localizedDescription
+            return
+        }
+        let model = UserDefaults.standard.string(forKey: "selectedModel") ?? "gemini-3.1-pro-preview"
+        let synth = DesignSystemSynthesizer(apiKey: key, model: model)
+        let snapshot = designSystem.snapshot()
+        let fingerprintAtStart = designSystem.currentInputFingerprint
+
+        do {
+            let result = try await synth.synthesize(snapshot)
+            designSystem.synthesizedMarkdown = result
+            designSystem.synthesizedAt = Date()
+            designSystem.synthesizedInputFingerprint = fingerprintAtStart
+            designSystem.updatedAt = Date()
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
     private func fetchSourceURL() async {
         let raw = sourceURLInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !raw.isEmpty else { return }
@@ -473,6 +596,7 @@ private struct DesignSystemEditorView: View {
     private enum ImportKind: Equatable {
         case url
         case zip
+        case synthesize
     }
 }
 

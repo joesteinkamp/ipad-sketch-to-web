@@ -89,4 +89,112 @@ final class DesignSystemTests: XCTestCase {
         let populated = DesignSystem(companyBlurb: "Acme")
         XCTAssertFalse(populated.snapshot().isEmpty)
     }
+
+    func testSnapshotMirrorsSynthesisFields() {
+        let ds = DesignSystem(companyBlurb: "Acme")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        ds.synthesizedMarkdown = "## Brand Voice\nWarm."
+        ds.synthesizedAt = now
+
+        let snap = ds.snapshot()
+        XCTAssertEqual(snap.synthesizedMarkdown, "## Brand Voice\nWarm.")
+        XCTAssertEqual(snap.synthesizedAt, now)
+    }
+
+    // MARK: - Fingerprint
+
+    func testFingerprintIsStableAcrossIdenticalInputs() {
+        let ds1 = DesignSystem(companyBlurb: "Acme", notes: "earth tones")
+        ds1.sourceURL = "https://github.com/acme/brand"
+        ds1.sourceURLContent = "# Brand"
+        ds1.fontFilePaths = ["/path/Inter.ttf", "/path/Display.otf"]
+
+        let ds2 = DesignSystem(companyBlurb: "Acme", notes: "earth tones")
+        ds2.sourceURL = "https://github.com/acme/brand"
+        ds2.sourceURLContent = "# Brand"
+        ds2.fontFilePaths = ["/path/Inter.ttf", "/path/Display.otf"]
+
+        XCTAssertEqual(ds1.currentInputFingerprint, ds2.currentInputFingerprint)
+    }
+
+    func testFingerprintIgnoresFontPathDirectoryAndOrder() {
+        let ds1 = DesignSystem()
+        ds1.fontFilePaths = ["/foo/Inter.ttf", "/bar/Display.otf"]
+
+        let ds2 = DesignSystem()
+        // Different directories, different order — fingerprint compares
+        // sorted basenames so both should match.
+        ds2.fontFilePaths = ["/Library/Display.otf", "/elsewhere/Inter.ttf"]
+
+        XCTAssertEqual(ds1.currentInputFingerprint, ds2.currentInputFingerprint)
+    }
+
+    func testFingerprintChangesWhenAnyTrackedFieldChanges() {
+        let baseline: () -> DesignSystem = {
+            let ds = DesignSystem(companyBlurb: "Acme", notes: "earthy")
+            ds.markdownContent = "# Doc"
+            ds.sourceURL = "https://github.com/acme/brand"
+            ds.sourceURLContent = "fetched"
+            ds.zipFilename = "design.zip"
+            ds.zipExtractedContent = "tailwind config"
+            ds.fontFilePaths = ["/path/Inter.ttf"]
+            ds.assetFilePaths = ["/path/logo.svg"]
+            return ds
+        }
+        let original = baseline().currentInputFingerprint
+
+        let mutators: [(String, (DesignSystem) -> Void)] = [
+            ("companyBlurb", { $0.companyBlurb = "Acme!" }),
+            ("notes", { $0.notes = "different" }),
+            ("markdownContent", { $0.markdownContent = "# New" }),
+            ("sourceURL", { $0.sourceURL = "https://other.example" }),
+            ("sourceURLContent", { $0.sourceURLContent = "different" }),
+            ("zipFilename", { $0.zipFilename = "other.zip" }),
+            ("zipExtractedContent", { $0.zipExtractedContent = "different" }),
+            ("presetSlug", { $0.presetSlug = "apple" }),
+            ("presetContent", { $0.presetContent = "# Apple\nAction Blue." }),
+            ("fontFilePaths", { $0.fontFilePaths = ["/path/Other.ttf"] }),
+            ("assetFilePaths", { $0.assetFilePaths = ["/path/mark.svg"] })
+        ]
+
+        for (label, mutate) in mutators {
+            let ds = baseline()
+            mutate(ds)
+            XCTAssertNotEqual(
+                ds.currentInputFingerprint,
+                original,
+                "fingerprint should change when \(label) changes"
+            )
+        }
+    }
+
+    // MARK: - Staleness
+
+    func testIsSynthesisStaleFalseWhenNoSynthesisExists() {
+        let ds = DesignSystem(companyBlurb: "Acme")
+        XCTAssertFalse(ds.isSynthesisStale)
+    }
+
+    func testIsSynthesisStaleFalseWhenFingerprintMatches() {
+        let ds = DesignSystem(companyBlurb: "Acme")
+        ds.synthesizedMarkdown = "## Brand"
+        ds.synthesizedInputFingerprint = ds.currentInputFingerprint
+        XCTAssertFalse(ds.isSynthesisStale)
+    }
+
+    func testIsSynthesisStaleTrueAfterInputChange() {
+        let ds = DesignSystem(companyBlurb: "Acme")
+        ds.synthesizedMarkdown = "## Brand"
+        ds.synthesizedInputFingerprint = ds.currentInputFingerprint
+
+        ds.companyBlurb = "Acme — playful fintech"
+        XCTAssertTrue(ds.isSynthesisStale)
+    }
+
+    func testIsSynthesisStaleFalseWhenSynthesizedMarkdownIsEmptyString() {
+        let ds = DesignSystem(companyBlurb: "Acme")
+        ds.synthesizedMarkdown = ""
+        ds.synthesizedInputFingerprint = "stale-fingerprint"
+        XCTAssertFalse(ds.isSynthesisStale)
+    }
 }
