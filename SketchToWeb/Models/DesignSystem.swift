@@ -48,6 +48,19 @@ final class DesignSystem {
     /// Sandbox-relative paths to imported asset/logo files.
     var assetFilePaths: [String] = []
 
+    /// Slug of the active getdesign.md preset (e.g. "apple"). Kept separate from
+    /// `markdownContent` so a user can combine a curated preset with their own
+    /// uploaded DESIGN.md and notes.
+    var presetSlug: String?
+
+    /// Display name of the active preset (e.g. "Apple"). Cached so the UI
+    /// doesn't need to consult the catalog.
+    var presetName: String?
+
+    /// Fetched DESIGN.md body for the active preset. Populated lazily by
+    /// `DesignSystemImporter.fetchPreset(slug:)` and cached on disk.
+    var presetContent: String?
+
     /// Distilled DESIGN.md produced by `DesignSystemSynthesizer`. When non-nil
     /// and non-empty, this replaces the raw `sourceURLContent` and
     /// `zipExtractedContent` blocks in the conversion prompt.
@@ -80,6 +93,7 @@ final class DesignSystem {
         (markdownContent?.isEmpty ?? true) &&
         (sourceURLContent?.isEmpty ?? true) &&
         (zipExtractedContent?.isEmpty ?? true) &&
+        (presetContent?.isEmpty ?? true) &&
         fontFilePaths.isEmpty &&
         assetFilePaths.isEmpty
     }
@@ -99,6 +113,8 @@ final class DesignSystem {
             sourceURLContent: sourceURLContent,
             zipFilename: zipFilename,
             zipExtractedContent: zipExtractedContent,
+            presetSlug: presetSlug,
+            presetContent: presetContent,
             notes: notes,
             fontFilePaths: fontFilePaths,
             assetFilePaths: assetFilePaths
@@ -146,6 +162,9 @@ final class DesignSystem {
             sourceURLContent: sourceURLContent,
             zipExtractedContent: zipExtractedContent,
             zipFilename: zipFilename,
+            presetSlug: presetSlug,
+            presetName: presetName,
+            presetContent: presetContent,
             fontFileNames: fontFilePaths.map { ($0 as NSString).lastPathComponent },
             assetFileNames: assetFilePaths.map { ($0 as NSString).lastPathComponent },
             synthesizedMarkdown: synthesizedMarkdown,
@@ -166,6 +185,9 @@ struct DesignSystemSnapshot: Sendable, Equatable {
     var sourceURLContent: String?
     var zipExtractedContent: String?
     var zipFilename: String?
+    var presetSlug: String? = nil
+    var presetName: String? = nil
+    var presetContent: String? = nil
     var fontFileNames: [String]
     var assetFileNames: [String]
     var synthesizedMarkdown: String?
@@ -177,6 +199,7 @@ struct DesignSystemSnapshot: Sendable, Equatable {
         (markdownContent?.isEmpty ?? true) &&
         (sourceURLContent?.isEmpty ?? true) &&
         (zipExtractedContent?.isEmpty ?? true) &&
+        (presetContent?.isEmpty ?? true) &&
         fontFileNames.isEmpty &&
         assetFileNames.isEmpty
     }
@@ -225,6 +248,8 @@ enum DesignSystemFingerprint {
         sourceURLContent: String?,
         zipFilename: String?,
         zipExtractedContent: String?,
+        presetSlug: String?,
+        presetContent: String?,
         notes: String,
         fontFilePaths: [String],
         assetFilePaths: [String]
@@ -236,6 +261,8 @@ enum DesignSystemFingerprint {
             sourceURLContent ?? "",
             zipFilename ?? "",
             zipExtractedContent ?? "",
+            presetSlug ?? "",
+            presetContent ?? "",
             notes,
             fontFilePaths
                 .map { ($0 as NSString).lastPathComponent }

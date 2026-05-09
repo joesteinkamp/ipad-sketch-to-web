@@ -9,6 +9,7 @@ struct SettingsView: View {
     @State private var connectionStatus: ConnectionStatus = .unknown
     @State private var isTesting = false
     @State private var showingDesignSystem = false
+    @State private var showingProjectDesign = false
 
     @AppStorage("selectedModel") private var selectedModel: String = "gemini-3.1-pro-preview"
     @AppStorage("autoConvertEnabled") private var autoConvertEnabled: Bool = true
@@ -144,7 +145,7 @@ struct SettingsView: View {
                 showingDesignSystem = true
             } label: {
                 HStack {
-                    Label("Design System", systemImage: "square.on.square.dashed")
+                    Label("Global design system", systemImage: "square.on.square.dashed")
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.caption.weight(.semibold))
@@ -152,10 +153,38 @@ struct SettingsView: View {
                 }
             }
             .buttonStyle(.plain)
+
+            if let project = appState.currentProject {
+                Button {
+                    showingProjectDesign = true
+                } label: {
+                    HStack {
+                        Label("This project's design", systemImage: "doc.badge.gearshape")
+                        Spacer()
+                        if project.usesCustomDesignSystem {
+                            Text(project.customPresetName ?? "Custom")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        } else {
+                            Text("Inherits")
+                                .font(.subheadline)
+                                .foregroundStyle(.tertiary)
+                        }
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+                .sheet(isPresented: $showingProjectDesign) {
+                    ProjectDesignSystemView(project: project)
+                }
+            }
         } header: {
             Text("Design System")
         } footer: {
-            Text("Add a DESIGN.md, link a repo, upload a zip, or paste notes — the conversion prompt will use this context.")
+            Text("Pick a curated preset, attach a DESIGN.md, link a repo, or paste notes — the conversion prompt will use this context. Each project can override the global default.")
         }
     }
 

@@ -151,6 +151,8 @@ final class DesignSystemTests: XCTestCase {
             ("sourceURLContent", { $0.sourceURLContent = "different" }),
             ("zipFilename", { $0.zipFilename = "other.zip" }),
             ("zipExtractedContent", { $0.zipExtractedContent = "different" }),
+            ("presetSlug", { $0.presetSlug = "apple" }),
+            ("presetContent", { $0.presetContent = "# Apple\nAction Blue." }),
             ("fontFilePaths", { $0.fontFilePaths = ["/path/Other.ttf"] }),
             ("assetFilePaths", { $0.assetFilePaths = ["/path/mark.svg"] })
         ]

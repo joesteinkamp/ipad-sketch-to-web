@@ -14,6 +14,26 @@ final class Project {
     var folder: ProjectFolder?
     var tags: [String] = []
 
+    /// When `true`, the project ignores the global `DesignSystem` and uses the
+    /// fields below instead. When `false`, the project inherits the global
+    /// design system. See `ContentView.updateDesignSystemSnapshot()`.
+    var usesCustomDesignSystem: Bool = false
+
+    /// Project-scoped getdesign.md preset (e.g. "stripe"). Mirrors
+    /// `DesignSystem.presetSlug` semantics.
+    var customPresetSlug: String?
+    var customPresetName: String?
+    var customPresetContent: String?
+
+    /// Project-scoped DESIGN.md upload override.
+    var customMarkdownContent: String?
+    var customMarkdownFilename: String?
+
+    /// Project-scoped freeform fields. Optional companions to the chosen
+    /// preset / markdown.
+    var customCompanyBlurb: String = ""
+    var customNotes: String = ""
+
     @Relationship(deleteRule: .cascade, inverse: \Generation.project)
     var generations: [Generation] = []
 

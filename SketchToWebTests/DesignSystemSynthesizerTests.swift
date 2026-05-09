@@ -36,6 +36,9 @@ final class DesignSystemSynthesizerTests: XCTestCase {
         sourceURLContent: String? = nil,
         zipExtractedContent: String? = nil,
         zipFilename: String? = nil,
+        presetSlug: String? = nil,
+        presetName: String? = nil,
+        presetContent: String? = nil,
         fontFileNames: [String] = [],
         assetFileNames: [String] = []
     ) -> DesignSystemSnapshot {
@@ -48,6 +51,9 @@ final class DesignSystemSynthesizerTests: XCTestCase {
             sourceURLContent: sourceURLContent,
             zipExtractedContent: zipExtractedContent,
             zipFilename: zipFilename,
+            presetSlug: presetSlug,
+            presetName: presetName,
+            presetContent: presetContent,
             fontFileNames: fontFileNames,
             assetFileNames: assetFileNames,
             synthesizedMarkdown: nil,
@@ -93,6 +99,32 @@ final class DesignSystemSynthesizerTests: XCTestCase {
 
         XCTAssertTrue(text.contains("# Source URL: https://github.com/acme/brand"))
         XCTAssertTrue(text.contains("# Zip: design.zip"))
+    }
+
+    func testUserTextIncludesPresetBlockWhenSet() {
+        let snap = makeSnapshot(
+            presetSlug: "apple",
+            presetName: "Apple",
+            presetContent: "# Apple Design System\n\nAction Blue (#0066cc), SF Pro Display."
+        )
+        let text = DesignSystemSynthesizer.buildUserText(snap)
+
+        XCTAssertTrue(text.contains("# Active Preset: Apple"))
+        XCTAssertTrue(text.contains("Action Blue"))
+    }
+
+    func testUserTextOmitsPresetBlockWhenContentEmpty() {
+        // Selecting a preset slug without fetched content shouldn't emit an
+        // empty header — synthesis only sees actual material.
+        let snap = makeSnapshot(
+            companyBlurb: "Acme",
+            presetSlug: "apple",
+            presetName: "Apple",
+            presetContent: ""
+        )
+        let text = DesignSystemSynthesizer.buildUserText(snap)
+
+        XCTAssertFalse(text.contains("# Active Preset"))
     }
 
     func testUserTextListsAssetsWithoutPaths() {

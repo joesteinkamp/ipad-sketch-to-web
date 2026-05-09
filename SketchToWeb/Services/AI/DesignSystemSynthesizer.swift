@@ -77,6 +77,11 @@ struct DesignSystemSynthesizer {
             blocks.append("# Company Blurb\n\(s.companyBlurb)")
         }
 
+        if let presetBody = s.presetContent, !presetBody.isEmpty {
+            let label = s.presetName ?? "Preset"
+            blocks.append("# Active Preset: \(label)\n\(truncate(presetBody, limit: synthesisInputLimit))")
+        }
+
         if let md = s.markdownContent, !md.isEmpty {
             let label = s.markdownFilename ?? "DESIGN.md"
             blocks.append("# Existing DESIGN.md (`\(label)`)\n\(truncate(md, limit: synthesisInputLimit))")

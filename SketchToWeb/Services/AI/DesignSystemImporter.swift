@@ -16,6 +16,7 @@ enum DesignSystemImporter {
         case archiveReadFailed(String)
         case httpError(Int)
         case allCandidatesFailed
+        case presetUnavailable(String)
 
         var errorDescription: String? {
             switch self {
@@ -29,6 +30,8 @@ enum DesignSystemImporter {
                 return "Server returned HTTP \(code)."
             case .allCandidatesFailed:
                 return "Couldn't find a DESIGN.md or README at that URL."
+            case .presetUnavailable(let slug):
+                return "Couldn't fetch the '\(slug)' preset. Check your connection and try again."
             }
         }
     }
@@ -126,6 +129,39 @@ enum DesignSystemImporter {
         guard parts.count >= 2 else { return nil }
         let repo = parts[1].hasSuffix(".git") ? String(parts[1].dropLast(4)) : parts[1]
         return (parts[0], repo)
+    }
+
+    // MARK: - Preset Fetch
+
+    /// Fetches a getdesign.md preset's `DESIGN.md` body, caching the result on
+    /// disk so subsequent selections work offline.
+    ///
+    /// - Parameter slug: Lowercase preset slug (e.g. `"apple"`, `"cal-com"`).
+    /// - Returns: The DESIGN.md body as plain text.
+    /// - Throws: `ImportError.presetUnavailable` when the network fetch fails
+    ///   and there is no cached copy on disk.
+    static func fetchPreset(slug: String) async throws -> String {
+        let cacheURL = try presetCacheURL(for: slug)
+
+        let remoteURL = "https://raw.githubusercontent.com/VoltAgent/awesome-design-md/main/design-md/\(slug)/DESIGN.md"
+
+        do {
+            let body = try await fetchText(remoteURL)
+            // Cache asynchronously-but-best-effort; ignore write errors.
+            try? body.data(using: .utf8)?.write(to: cacheURL, options: .atomic)
+            return body
+        } catch {
+            if let cached = try? String(contentsOf: cacheURL, encoding: .utf8), !cached.isEmpty {
+                return cached
+            }
+            throw ImportError.presetUnavailable(slug)
+        }
+    }
+
+    private static func presetCacheURL(for slug: String) throws -> URL {
+        let directory = try designSystemDirectory().appendingPathComponent("Presets", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("\(slug).md")
     }
 
     private static func fetchText(_ urlString: String) async throws -> String {

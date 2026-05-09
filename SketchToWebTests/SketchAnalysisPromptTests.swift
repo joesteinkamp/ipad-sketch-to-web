@@ -111,6 +111,61 @@ final class SketchAnalysisPromptTests: XCTestCase {
         XCTAssertTrue(prompt.contains("Use warm earth tones."))
     }
 
+    func testBuildSystemPromptIncludesPresetSection() {
+        let snapshot = DesignSystemSnapshot(
+            companyBlurb: "",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: nil,
+            sourceURLContent: nil,
+            zipExtractedContent: nil,
+            zipFilename: nil,
+            presetSlug: "apple",
+            presetName: "Apple",
+            presetContent: "# Apple Design System\n\nAction Blue (#0066cc), SF Pro Display.",
+            fontFileNames: [],
+            assetFileNames: []
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: snapshot
+        )
+
+        XCTAssertTrue(prompt.contains("# Design System Context"))
+        XCTAssertTrue(prompt.contains("## Design Preset: Apple"))
+        XCTAssertTrue(prompt.contains("Action Blue"))
+    }
+
+    func testEmptyPresetContentDoesNotAddSection() {
+        let snapshot = DesignSystemSnapshot(
+            companyBlurb: "",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: nil,
+            sourceURLContent: nil,
+            zipExtractedContent: nil,
+            zipFilename: nil,
+            presetSlug: "apple",
+            presetName: "Apple",
+            presetContent: "",
+            fontFileNames: [],
+            assetFileNames: []
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: snapshot
+        )
+
+        // Empty body means the preset block is skipped — and since this is the
+        // only field set, the whole Design System section should be omitted.
+        XCTAssertFalse(prompt.contains("# Design System Context"))
+        XCTAssertFalse(prompt.contains("## Design Preset"))
+    }
+
     func testBuildSystemPromptIncludesAssetNames() {
         let snapshot = DesignSystemSnapshot(
             companyBlurb: "",
