@@ -5,7 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* shadcn/ui CSS custom properties */
+        /*
+         * shadcn/ui CSS custom properties (Slate, light mode).
+         *
+         * NOTE: at runtime the host app injects a `<style id="sketch-theme-tokens">`
+         * block via `HTMLTemplateEngine.injectTheme(into:theme:)` and overrides these
+         * defaults based on the user's chosen base color and appearance. This file is
+         * the offline / reference template — keep its values in sync with
+         * `ShadcnTheme.tokens(for: .slate, isDark: false)` in
+         * `SketchToWeb/Models/ShadcnTheme.swift` (the source of truth).
+         */
         :root {
             --background: 0 0% 100%;
             --foreground: 222.2 84% 4.9%;

@@ -374,9 +374,31 @@ private struct CommentEditorView: View {
 
 /// A web preview wrapper that exposes a reference to the underlying WKWebView
 /// so the parent can call `takeSnapshot` on it.
+///
+/// Mirrors `WebPreviewView`'s theme-injection behavior so the captured screenshot
+/// (used by the refinement pipeline) reflects the user's active theme.
 private struct SnapshotableWebPreviewView: UIViewRepresentable {
     let htmlContent: String
     @Binding var webViewRef: WKWebView?
+
+    @AppStorage(ShadcnThemeStorage.baseColorKey)
+    private var baseColorRaw: String = ShadcnThemeStorage.defaultBaseColor.rawValue
+
+    @AppStorage(ShadcnThemeStorage.appearanceKey)
+    private var appearanceRaw: String = ShadcnThemeStorage.defaultAppearance.rawValue
+
+    @Environment(\.colorScheme) private var systemColorScheme
+
+    private var themedHTML: String {
+        let base = ShadcnBaseColor(rawValue: baseColorRaw) ?? ShadcnThemeStorage.defaultBaseColor
+        let appearance = ThemeAppearance(rawValue: appearanceRaw) ?? ShadcnThemeStorage.defaultAppearance
+        let theme = ShadcnTheme.resolve(
+            base: base,
+            appearance: appearance,
+            systemPrefersDark: systemColorScheme == .dark
+        )
+        return HTMLTemplateEngine.injectTheme(into: htmlContent, theme: theme)
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -402,9 +424,10 @@ private struct SnapshotableWebPreviewView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        guard context.coordinator.lastLoadedContent != htmlContent else { return }
-        context.coordinator.lastLoadedContent = htmlContent
-        webView.loadHTMLString(htmlContent, baseURL: nil)
+        let rendered = themedHTML
+        guard context.coordinator.lastLoadedContent != rendered else { return }
+        context.coordinator.lastLoadedContent = rendered
+        webView.loadHTMLString(rendered, baseURL: nil)
     }
 
     final class Coordinator {
