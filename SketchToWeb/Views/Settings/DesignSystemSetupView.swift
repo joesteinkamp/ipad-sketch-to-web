@@ -40,6 +40,7 @@ private struct DesignSystemEditorView: View {
     @State private var showZipPicker = false
     @State private var showFontPicker = false
     @State private var showAssetPicker = false
+    @State private var showPresetGallery = false
 
     var body: some View {
         NavigationStack {
@@ -116,6 +117,7 @@ private struct DesignSystemEditorView: View {
     @ViewBuilder
     private var resourcesSection: some View {
         Section {
+            presetRow
             markdownRow
             githubURLRow
             zipRow
@@ -143,6 +145,49 @@ private struct DesignSystemEditorView: View {
     }
 
     // MARK: - Resource Rows
+
+    @ViewBuilder
+    private var presetRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Label("Choose a preset", systemImage: "sparkles")
+                Spacer()
+                Button(designSystem.presetSlug == nil ? "Browse…" : "Change") {
+                    showPresetGallery = true
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+            if let name = designSystem.presetName {
+                attachedRow(name: name) {
+                    designSystem.presetSlug = nil
+                    designSystem.presetName = nil
+                    designSystem.presetContent = nil
+                    designSystem.updatedAt = Date()
+                }
+            }
+            Text("Curated DESIGN.md files inspired by Apple, Stripe, Linear, and more.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .sheet(isPresented: $showPresetGallery) {
+            DesignPresetGalleryView(
+                activeSlug: designSystem.presetSlug,
+                onSelect: { preset, body in
+                    designSystem.presetSlug = preset.slug
+                    designSystem.presetName = preset.name
+                    designSystem.presetContent = body
+                    designSystem.updatedAt = Date()
+                },
+                onClear: {
+                    designSystem.presetSlug = nil
+                    designSystem.presetName = nil
+                    designSystem.presetContent = nil
+                    designSystem.updatedAt = Date()
+                }
+            )
+        }
+    }
 
     @ViewBuilder
     private var markdownRow: some View {

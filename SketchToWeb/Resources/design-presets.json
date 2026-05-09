@@ -1,0 +1,122 @@
+[
+  {
+    "slug": "apple",
+    "name": "Apple",
+    "blurb": "Photography-first, museum-gallery feel. SF Pro, generous whitespace, single Action Blue accent.",
+    "category": "Enterprise"
+  },
+  {
+    "slug": "stripe",
+    "name": "Stripe",
+    "blurb": "Polished gradients, confident typography, refined product surfaces.",
+    "category": "Enterprise"
+  },
+  {
+    "slug": "vercel",
+    "name": "Vercel",
+    "blurb": "Minimal monochrome with sharp geometry and dev-tool restraint.",
+    "category": "Dev Tools"
+  },
+  {
+    "slug": "linear",
+    "name": "Linear",
+    "blurb": "Crisp dark UI with high-density product surfaces and subtle motion.",
+    "category": "SaaS"
+  },
+  {
+    "slug": "notion",
+    "name": "Notion",
+    "blurb": "Friendly serif accents, lots of white space, document-first chrome.",
+    "category": "SaaS"
+  },
+  {
+    "slug": "figma",
+    "name": "Figma",
+    "blurb": "Playful gradients, rounded geometry, designer-tool palette.",
+    "category": "Design"
+  },
+  {
+    "slug": "framer",
+    "name": "Framer",
+    "blurb": "Editorial typography, animation-forward, gallery layouts.",
+    "category": "Design"
+  },
+  {
+    "slug": "raycast",
+    "name": "Raycast",
+    "blurb": "Compact dark surfaces with vivid red accents and command-bar geometry.",
+    "category": "Dev Tools"
+  },
+  {
+    "slug": "supabase",
+    "name": "Supabase",
+    "blurb": "Emerald accents on dark, monospace flourishes, developer-friendly density.",
+    "category": "Dev Tools"
+  },
+  {
+    "slug": "posthog",
+    "name": "PostHog",
+    "blurb": "Bold sans, oversized stats, energetic accent colors and flat illustrations.",
+    "category": "Dev Tools"
+  },
+  {
+    "slug": "claude",
+    "name": "Claude",
+    "blurb": "Warm cream canvas, soft serif headings, calm conversational tone.",
+    "category": "AI"
+  },
+  {
+    "slug": "openai",
+    "name": "OpenAI",
+    "blurb": "Restrained dark canvas, generous spacing, soft-edged geometry.",
+    "category": "AI"
+  },
+  {
+    "slug": "elevenlabs",
+    "name": "ElevenLabs",
+    "blurb": "High-contrast dark UI with audio waveform motifs and vibrant accents.",
+    "category": "AI"
+  },
+  {
+    "slug": "cohere",
+    "name": "Cohere",
+    "blurb": "Bright coral accents, clean geometric sans, science-paper layouts.",
+    "category": "AI"
+  },
+  {
+    "slug": "replicate",
+    "name": "Replicate",
+    "blurb": "Black background, neon green hits, gallery-style model cards.",
+    "category": "AI"
+  },
+  {
+    "slug": "tesla",
+    "name": "Tesla",
+    "blurb": "Cinematic full-bleed photography, minimal chrome, subtle red call-to-action.",
+    "category": "Brand"
+  },
+  {
+    "slug": "uber",
+    "name": "Uber",
+    "blurb": "Bold neutral system, strong type hierarchy, transit-clarity layouts.",
+    "category": "Brand"
+  },
+  {
+    "slug": "nvidia",
+    "name": "NVIDIA",
+    "blurb": "Black canvas with electric green accents, technical product imagery.",
+    "category": "Brand"
+  },
+  {
+    "slug": "intercom",
+    "name": "Intercom",
+    "blurb": "Friendly rounded geometry, warm purples, conversational illustrations.",
+    "category": "SaaS"
+  },
+  {
+    "slug": "cal-com",
+    "name": "Cal.com",
+    "blurb": "Calm modern sans, gentle gradients, scheduling-focused layouts.",
+    "category": "SaaS"
+  }
+]
