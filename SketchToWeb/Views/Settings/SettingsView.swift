@@ -14,6 +14,10 @@ struct SettingsView: View {
     @AppStorage("autoConvertEnabled") private var autoConvertEnabled: Bool = true
     @AppStorage("showDrawingHints") private var showDrawingHints: Bool = true
     @AppStorage("defaultDesignDestination") private var defaultDesignDestination: String = DesignDestination.figma.rawValue
+    @AppStorage(ShadcnThemeStorage.baseColorKey)
+    private var shadcnBaseColor: String = ShadcnThemeStorage.defaultBaseColor.rawValue
+    @AppStorage(ShadcnThemeStorage.appearanceKey)
+    private var themeAppearance: String = ShadcnThemeStorage.defaultAppearance.rawValue
 
     @EnvironmentObject private var appState: AppState
 
@@ -32,6 +36,7 @@ struct SettingsView: View {
                 apiKeySection
                 modelSection
                 behaviorSection
+                appearanceSection
                 designSystemSection
                 designToolsSection
                 connectionSection
@@ -105,6 +110,28 @@ struct SettingsView: View {
             Text("Behavior")
         } footer: {
             Text("Auto-convert sends your sketch to the AI after a 3-second drawing pause. Drawing hints show subtle badges guessing what component each shape might become.")
+        }
+    }
+
+    // MARK: - Appearance
+
+    @ViewBuilder
+    private var appearanceSection: some View {
+        Section {
+            Picker("Base color", selection: $shadcnBaseColor) {
+                ForEach(ShadcnBaseColor.allCases) { color in
+                    Text(color.displayName).tag(color.rawValue)
+                }
+            }
+            Picker("Mode", selection: $themeAppearance) {
+                ForEach(ThemeAppearance.allCases) { appearance in
+                    Text(appearance.displayName).tag(appearance.rawValue)
+                }
+            }
+        } header: {
+            Text("Appearance")
+        } footer: {
+            Text("Theme tokens are injected into the rendered preview at runtime — switching here re-themes existing previews without re-prompting the AI.")
         }
     }
 

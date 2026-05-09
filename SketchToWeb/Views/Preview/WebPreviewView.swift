@@ -2,8 +2,32 @@ import SwiftUI
 import WebKit
 
 /// A SwiftUI wrapper around WKWebView that renders self-contained HTML content.
+///
+/// Theme tokens (shadcn base color + light/dark) are injected into the model-generated
+/// HTML at render time so the user can re-theme any preview without re-prompting the
+/// AI. The active theme is sourced from `@AppStorage` and the SwiftUI environment's
+/// `colorScheme` (so "System" follows the iPad's appearance).
 struct WebPreviewView: UIViewRepresentable {
     let htmlContent: String
+
+    @AppStorage(ShadcnThemeStorage.baseColorKey)
+    private var baseColorRaw: String = ShadcnThemeStorage.defaultBaseColor.rawValue
+
+    @AppStorage(ShadcnThemeStorage.appearanceKey)
+    private var appearanceRaw: String = ShadcnThemeStorage.defaultAppearance.rawValue
+
+    @Environment(\.colorScheme) private var systemColorScheme
+
+    private var themedHTML: String {
+        let base = ShadcnBaseColor(rawValue: baseColorRaw) ?? ShadcnThemeStorage.defaultBaseColor
+        let appearance = ThemeAppearance(rawValue: appearanceRaw) ?? ShadcnThemeStorage.defaultAppearance
+        let theme = ShadcnTheme.resolve(
+            base: base,
+            appearance: appearance,
+            systemPrefersDark: systemColorScheme == .dark
+        )
+        return HTMLTemplateEngine.injectTheme(into: htmlContent, theme: theme)
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -26,10 +50,11 @@ struct WebPreviewView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        // Only reload when the HTML content has actually changed.
-        guard context.coordinator.lastLoadedContent != htmlContent else { return }
-        context.coordinator.lastLoadedContent = htmlContent
-        webView.loadHTMLString(htmlContent, baseURL: nil)
+        let rendered = themedHTML
+        // Only reload when the HTML content (or theme-derived output) has actually changed.
+        guard context.coordinator.lastLoadedContent != rendered else { return }
+        context.coordinator.lastLoadedContent = rendered
+        webView.loadHTMLString(rendered, baseURL: nil)
     }
 
     // MARK: - Coordinator

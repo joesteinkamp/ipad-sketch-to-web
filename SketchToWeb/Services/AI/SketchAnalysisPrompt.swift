@@ -63,6 +63,15 @@ enum SketchAnalysisPrompt {
         - Use shadcn/ui default variants unless the sketch clearly indicates a specific variant (e.g., outline button vs filled button).
         - Maintain consistent spacing and alignment using Tailwind's spacing scale.
 
+        # Color Tokens (REQUIRED)
+        The host app injects shadcn/ui CSS variables on `:root` and toggles a `dark` class on `<html>` so the user can switch base colors and light/dark mode without re-prompting. For this to work, you MUST drive every color and the corner radius from these tokens via Tailwind arbitrary-value classes:
+        - Backgrounds: `bg-[hsl(var(--background))]`, `bg-[hsl(var(--card))]`, `bg-[hsl(var(--popover))]`, `bg-[hsl(var(--primary))]`, `bg-[hsl(var(--secondary))]`, `bg-[hsl(var(--muted))]`, `bg-[hsl(var(--accent))]`, `bg-[hsl(var(--destructive))]`.
+        - Foregrounds / text: `text-[hsl(var(--foreground))]`, `text-[hsl(var(--card-foreground))]`, `text-[hsl(var(--primary-foreground))]`, `text-[hsl(var(--secondary-foreground))]`, `text-[hsl(var(--muted-foreground))]`, `text-[hsl(var(--accent-foreground))]`, `text-[hsl(var(--destructive-foreground))]`.
+        - Borders / inputs / focus rings: `border-[hsl(var(--border))]`, `border-[hsl(var(--input))]`, `ring-[hsl(var(--ring))]`, `focus-visible:ring-[hsl(var(--ring))]`.
+        - Corner radius: `rounded-[var(--radius)]` for cards/dialogs, `rounded-[calc(var(--radius)-2px)]` for inputs/buttons, `rounded-[calc(var(--radius)-4px)]` for badges.
+        - Do NOT emit hard-coded color utilities like `bg-blue-600`, `text-gray-900`, `border-slate-200`, or hex/rgb values. They will not respond to the user's theme choice.
+        - Treat the page background as `bg-[hsl(var(--background))]` and body text as `text-[hsl(var(--foreground))]` so pages look correct in both light and dark mode.
+
         # Output Format
         You MUST respond with valid JSON containing exactly two keys:
 
@@ -76,8 +85,8 @@ enum SketchAnalysisPrompt {
         ## htmlPreview
         A complete, self-contained HTML document that can be rendered directly in a web view. Requirements:
         - Include `<script src="https://cdn.tailwindcss.com"></script>` in the `<head>`.
-        - Style components to visually match shadcn/ui defaults (rounded corners, proper padding, neutral color palette).
-        - Use Tailwind classes for all styling.
+        - Style components to visually match shadcn/ui defaults (rounded corners, proper padding).
+        - Use Tailwind classes for all styling, and drive every color from the shadcn CSS variables via arbitrary-value classes (see "Color Tokens" above). The host app injects the `:root` block at runtime — your output will look broken if you hard-code hex/rgb/named-color utilities.
         - The HTML should be a faithful visual representation of what the React component would render.
         - Include a proper `<!DOCTYPE html>` declaration and viewport meta tag.
 

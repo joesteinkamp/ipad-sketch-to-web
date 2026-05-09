@@ -1,25 +1,38 @@
 import Foundation
 
-/// Builds complete HTML documents for previewing generated UI code.
+/// Builds complete HTML documents for previewing generated UI code, and injects
+/// shadcn/ui theme tokens into model-generated HTML at runtime.
 enum HTMLTemplateEngine {
+
+    /// `<style>` `id` used for the runtime-injected token block. Matched by the
+    /// idempotency check in `injectTheme(into:theme:)` so repeated calls replace
+    /// rather than accumulate.
+    static let themeStyleID = "sketch-theme-tokens"
 
     // MARK: - Public API
 
     /// Returns a complete HTML document that loads Tailwind CSS from the CDN
     /// and applies shadcn/ui-compatible theming via CSS custom properties.
     ///
-    /// - Parameter body: Raw HTML to inject inside `<body>`.
-    /// - Returns: A fully-formed HTML string ready for `WKWebView`.
-    static func buildPreviewHTML(body: String) -> String {
+    /// - Parameters:
+    ///   - body: Raw HTML to inject inside `<body>`.
+    ///   - theme: shadcn theme to apply. Defaults to Slate light to match the
+    ///     historical hardcoded values.
+    static func buildPreviewHTML(
+        body: String,
+        theme: ShadcnTheme = ShadcnTheme(base: .slate, isDark: false)
+    ) -> String {
         """
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="en"\(theme.isDark ? " class=\"dark\"" : "")>
         <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <script src="https://cdn.tailwindcss.com"></script>
+        <style id="\(themeStyleID)">
+        \(themeCSS(for: theme))
+        </style>
         <style>
-        \(themeCSS)
         \(baseCSS)
         \(interactiveCSS)
         </style>
@@ -38,17 +51,25 @@ enum HTMLTemplateEngine {
     /// - Parameters:
     ///   - body: Raw HTML to inject inside `<body>`.
     ///   - bundledCSS: A CSS string (e.g. a pre-built Tailwind stylesheet) to embed inline.
-    /// - Returns: A fully-formed, self-contained HTML string.
-    static func buildOfflineHTML(body: String, bundledCSS: String) -> String {
+    ///   - theme: shadcn theme to apply.
+    static func buildOfflineHTML(
+        body: String,
+        bundledCSS: String,
+        theme: ShadcnTheme = ShadcnTheme(base: .slate, isDark: false)
+    ) -> String {
         """
         <!DOCTYPE html>
-        <html lang="en">
+        <html lang="en"\(theme.isDark ? " class=\"dark\"" : "")>
         <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <style>
         \(bundledCSS)
-        \(themeCSS)
+        </style>
+        <style id="\(themeStyleID)">
+        \(themeCSS(for: theme))
+        </style>
+        <style>
         \(baseCSS)
         \(interactiveCSS)
         </style>
@@ -61,33 +82,88 @@ enum HTMLTemplateEngine {
         """
     }
 
+    /// Splices a `<style id="sketch-theme-tokens">` block of shadcn token values
+    /// into the model-generated HTML and toggles the `dark` class on `<html>`.
+    ///
+    /// Idempotent: if a previous theme block exists (e.g. because this HTML was
+    /// fed back through the refinement loop), it is replaced rather than
+    /// appended, so callers can safely re-inject on every render.
+    static func injectTheme(into html: String, theme: ShadcnTheme) -> String {
+        let styleBlock = """
+        <style id="\(themeStyleID)">
+        \(themeCSS(for: theme))
+        </style>
+        """
+
+        var working = html
+        let existingPattern = #"<style id="\#(themeStyleID)">[\s\S]*?</style>"#
+
+        if let existing = working.range(of: existingPattern, options: .regularExpression) {
+            working.replaceSubrange(existing, with: styleBlock)
+        } else if let headEnd = working.range(of: "</head>", options: .caseInsensitive) {
+            working.insert(contentsOf: styleBlock + "\n", at: headEnd.lowerBound)
+        } else if let bodyStart = working.range(of: "<body", options: .caseInsensitive) {
+            // Model omitted <head>: synthesize one before <body>.
+            let synthesized = "<head>\n\(styleBlock)\n</head>\n"
+            working.insert(contentsOf: synthesized, at: bodyStart.lowerBound)
+        } else {
+            // No recognizable structure — prepend so at least the variables are present.
+            working = styleBlock + "\n" + working
+        }
+
+        return setDarkClassOnHTMLTag(in: working, isDark: theme.isDark)
+    }
+
+    /// Adds or removes a `dark` class on the `<html>` opening tag. Preserves
+    /// other classes and other attributes (e.g. `lang`).
+    private static func setDarkClassOnHTMLTag(in html: String, isDark: Bool) -> String {
+        guard let tagRange = html.range(of: #"<html\b[^>]*>"#, options: .regularExpression) else {
+            return html
+        }
+        let original = String(html[tagRange])
+        var result = html
+        result.replaceSubrange(tagRange, with: rewriteHTMLTagDarkClass(original, isDark: isDark))
+        return result
+    }
+
+    private static func rewriteHTMLTagDarkClass(_ tag: String, isDark: Bool) -> String {
+        if let classRange = tag.range(of: #"class="[^"]*""#, options: .regularExpression) {
+            let attr = String(tag[classRange])
+            // attr looks like `class="foo bar"` — strip leading 7 + trailing 1 chars to get value.
+            let value = attr.dropFirst(7).dropLast()
+            var classes = value
+                .split(separator: " ")
+                .map(String.init)
+                .filter { !$0.isEmpty && $0 != "dark" }
+            if isDark { classes.append("dark") }
+
+            let replacement = classes.isEmpty ? "" : "class=\"\(classes.joined(separator: " "))\""
+            var rewritten = tag
+            rewritten.replaceSubrange(classRange, with: replacement)
+            return rewritten
+                .replacingOccurrences(of: "  ", with: " ")
+                .replacingOccurrences(of: " >", with: ">")
+        }
+
+        guard isDark else { return tag }
+        // No existing class attribute — insert one before the closing `>`.
+        guard let closing = tag.lastIndex(of: ">") else { return tag }
+        var rewritten = tag
+        rewritten.insert(contentsOf: " class=\"dark\"", at: closing)
+        return rewritten
+    }
+
     // MARK: - Private Fragments
 
-    /// CSS custom properties matching shadcn/ui theming conventions.
-    private static let themeCSS = """
-    :root {
-        --background: 0 0% 100%;
-        --foreground: 222.2 84% 4.9%;
-        --card: 0 0% 100%;
-        --card-foreground: 222.2 84% 4.9%;
-        --popover: 0 0% 100%;
-        --popover-foreground: 222.2 84% 4.9%;
-        --primary: 222.2 47.4% 11.2%;
-        --primary-foreground: 210 40% 98%;
-        --secondary: 210 40% 96.1%;
-        --secondary-foreground: 222.2 47.4% 11.2%;
-        --muted: 210 40% 96.1%;
-        --muted-foreground: 215.4 16.3% 46.9%;
-        --accent: 210 40% 96.1%;
-        --accent-foreground: 222.2 47.4% 11.2%;
-        --destructive: 0 84.2% 60.2%;
-        --destructive-foreground: 210 40% 98%;
-        --border: 214.3 31.8% 91.4%;
-        --input: 214.3 31.8% 91.4%;
-        --ring: 222.2 84% 4.9%;
-        --radius: 0.5rem;
+    /// Renders the `:root` body for a given shadcn theme. The leading indent
+    /// keeps the output readable when embedded in a larger `<style>` block.
+    private static func themeCSS(for theme: ShadcnTheme) -> String {
+        let indented = theme.cssTokens()
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "    " + $0 }
+            .joined(separator: "\n")
+        return ":root {\n\(indented)\n}"
     }
-    """
 
     /// Base body styles: system font stack, antialiasing, and theme-aware colors.
     private static let baseCSS = """

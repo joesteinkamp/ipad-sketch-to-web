@@ -10,6 +10,11 @@ struct PreviewContainerView: View {
     @State private var showingShareSheet = false
     @State private var showingSendToDesign = false
 
+    @AppStorage(ShadcnThemeStorage.baseColorKey)
+    private var shadcnBaseColor: String = ShadcnThemeStorage.defaultBaseColor.rawValue
+    @AppStorage(ShadcnThemeStorage.appearanceKey)
+    private var themeAppearance: String = ShadcnThemeStorage.defaultAppearance.rawValue
+
     // MARK: - Tab Enum
 
     private enum PreviewTab: String, CaseIterable, Identifiable {
@@ -68,6 +73,8 @@ struct PreviewContainerView: View {
             }
 
             ToolbarItemGroup(placement: .primaryAction) {
+                themeMenu
+
                 Button {
                     showingSendToDesign = true
                 } label: {
@@ -91,6 +98,27 @@ struct PreviewContainerView: View {
         .sheet(isPresented: $showingSendToDesign) {
             SendToDesignSheet()
         }
+    }
+
+    // MARK: - Theme Menu
+
+    @ViewBuilder
+    private var themeMenu: some View {
+        Menu {
+            Picker("Base color", selection: $shadcnBaseColor) {
+                ForEach(ShadcnBaseColor.allCases) { color in
+                    Text(color.displayName).tag(color.rawValue)
+                }
+            }
+            Picker("Mode", selection: $themeAppearance) {
+                ForEach(ThemeAppearance.allCases) { appearance in
+                    Text(appearance.displayName).tag(appearance.rawValue)
+                }
+            }
+        } label: {
+            Label("Theme", systemImage: "paintpalette")
+        }
+        .accessibilityLabel("Theme")
     }
 
     // MARK: - Tab Content
