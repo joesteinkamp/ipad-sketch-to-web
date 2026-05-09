@@ -1,29 +1,81 @@
 import SwiftUI
 import SwiftData
 
+enum LayoutMode: String, CaseIterable, Identifiable {
+    case sketch, split, preview
+    var id: String { rawValue }
+
+    var symbol: String {
+        switch self {
+        case .sketch:  return "pencil.tip"
+        case .split:   return "rectangle.split.2x1"
+        case .preview: return "rectangle"
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .sketch:  return "Sketch"
+        case .split:   return "Split"
+        case .preview: return "Preview"
+        }
+    }
+}
+
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
     @Query(sort: \DesignSystem.createdAt) private var designSystems: [DesignSystem]
     @State private var selectedProject: Project?
     @State private var showingSettings = false
+    @AppStorage("layoutMode") private var layoutModeRaw: String = LayoutMode.split.rawValue
+
+    private var layoutMode: LayoutMode {
+        LayoutMode(rawValue: layoutModeRaw) ?? .split
+    }
 
     var body: some View {
         NavigationSplitView {
             ProjectListView(selectedProject: $selectedProject)
         } detail: {
             if let project = selectedProject {
-                HStack(spacing: 0) {
-                    CanvasView(project: $selectedProject)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Group {
+                    switch layoutMode {
+                    case .sketch:
+                        CanvasView(project: $selectedProject)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    case .split:
+                        HStack(spacing: 0) {
+                            CanvasView(project: $selectedProject)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    Divider()
+                            Divider()
 
-                    PreviewContainerView(project: project)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            PreviewContainerView(project: project)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    case .preview:
+                        PreviewContainerView(project: project)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
+                .animation(.easeInOut(duration: 0.2), value: layoutMode)
                 .navigationTitle(project.name)
                 .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Picker("Layout", selection: Binding(
+                            get: { layoutMode },
+                            set: { layoutModeRaw = $0.rawValue }
+                        )) {
+                            ForEach(LayoutMode.allCases) { mode in
+                                Image(systemName: mode.symbol)
+                                    .accessibilityLabel(mode.label)
+                                    .tag(mode)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 180)
+                    }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
                             showingSettings = true
