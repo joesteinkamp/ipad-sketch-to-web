@@ -164,14 +164,22 @@ enum SketchAnalysisPrompt {
             section += "## Design Doc (`\(label)`)\n\(truncate(markdown, limit: 6000))\n\n"
         }
 
-        if let urlText = ds.sourceURLContent, !urlText.isEmpty {
-            let label = ds.sourceURL ?? "source"
-            section += "## From \(label)\n\(truncate(urlText, limit: 4000))\n\n"
-        }
+        // Once a synthesis exists, prefer the distilled markdown over the raw
+        // fetched / zip-extracted blobs — those were the *inputs* to the
+        // synthesis and would otherwise duplicate context (and burn tokens) on
+        // every conversion call.
+        if let synth = ds.synthesizedMarkdown, !synth.isEmpty {
+            section += "## Synthesized Design System\n\(truncate(synth, limit: 6000))\n\n"
+        } else {
+            if let urlText = ds.sourceURLContent, !urlText.isEmpty {
+                let label = ds.sourceURL ?? "source"
+                section += "## From \(label)\n\(truncate(urlText, limit: 4000))\n\n"
+            }
 
-        if let zipText = ds.zipExtractedContent, !zipText.isEmpty {
-            let label = ds.zipFilename ?? "imported archive"
-            section += "## From `\(label)`\n\(truncate(zipText, limit: 6000))\n\n"
+            if let zipText = ds.zipExtractedContent, !zipText.isEmpty {
+                let label = ds.zipFilename ?? "imported archive"
+                section += "## From `\(label)`\n\(truncate(zipText, limit: 6000))\n\n"
+            }
         }
 
         if !ds.fontFileNames.isEmpty || !ds.assetFileNames.isEmpty {

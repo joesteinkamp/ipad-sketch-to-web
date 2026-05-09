@@ -160,6 +160,120 @@ final class SketchAnalysisPromptTests: XCTestCase {
         XCTAssertFalse(prompt.contains(huge))
     }
 
+    // MARK: - Synthesized markdown branching
+
+    func testSynthesizedMarkdownReplacesRawSourceAndZipBlocks() {
+        let snapshot = DesignSystemSnapshot(
+            companyBlurb: "Acme",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: "https://github.com/acme/brand",
+            sourceURLContent: "raw fetched README contents",
+            zipExtractedContent: "raw zip extracted contents",
+            zipFilename: "design.zip",
+            fontFileNames: [],
+            assetFileNames: [],
+            synthesizedMarkdown: "## Brand Voice\nWarm and confident.",
+            synthesizedAt: Date()
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: snapshot
+        )
+
+        XCTAssertTrue(prompt.contains("## Synthesized Design System"))
+        XCTAssertTrue(prompt.contains("Warm and confident."))
+        // Raw blocks must be suppressed once synthesis exists.
+        XCTAssertFalse(prompt.contains("## From https://github.com/acme/brand"))
+        XCTAssertFalse(prompt.contains("## From `design.zip`"))
+        XCTAssertFalse(prompt.contains("raw fetched README contents"))
+        XCTAssertFalse(prompt.contains("raw zip extracted contents"))
+        // Curated sections are preserved.
+        XCTAssertTrue(prompt.contains("## About"))
+    }
+
+    func testRawBlocksReturnWhenSynthesizedMarkdownIsNil() {
+        let snapshot = DesignSystemSnapshot(
+            companyBlurb: "",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: "https://github.com/acme/brand",
+            sourceURLContent: "raw fetched README contents",
+            zipExtractedContent: "raw zip extracted contents",
+            zipFilename: "design.zip",
+            fontFileNames: [],
+            assetFileNames: [],
+            synthesizedMarkdown: nil,
+            synthesizedAt: nil
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: snapshot
+        )
+
+        XCTAssertFalse(prompt.contains("## Synthesized Design System"))
+        XCTAssertTrue(prompt.contains("## From https://github.com/acme/brand"))
+        XCTAssertTrue(prompt.contains("raw fetched README contents"))
+        XCTAssertTrue(prompt.contains("## From `design.zip`"))
+        XCTAssertTrue(prompt.contains("raw zip extracted contents"))
+    }
+
+    func testEmptySynthesizedMarkdownFallsBackToRawBlocks() {
+        let snapshot = DesignSystemSnapshot(
+            companyBlurb: "Acme",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: "https://github.com/acme/brand",
+            sourceURLContent: "raw fetched README contents",
+            zipExtractedContent: nil,
+            zipFilename: nil,
+            fontFileNames: [],
+            assetFileNames: [],
+            synthesizedMarkdown: "",
+            synthesizedAt: Date()
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: snapshot
+        )
+
+        XCTAssertFalse(prompt.contains("## Synthesized Design System"))
+        XCTAssertTrue(prompt.contains("raw fetched README contents"))
+    }
+
+    func testSynthesizedMarkdownTruncatesAtSectionLimit() {
+        let huge = String(repeating: "y", count: 20_000)
+        let snapshot = DesignSystemSnapshot(
+            companyBlurb: "",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: nil,
+            sourceURLContent: nil,
+            zipExtractedContent: nil,
+            zipFilename: nil,
+            fontFileNames: [],
+            assetFileNames: [],
+            synthesizedMarkdown: huge,
+            synthesizedAt: Date()
+        )
+
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: snapshot
+        )
+
+        XCTAssertTrue(prompt.contains("## Synthesized Design System"))
+        XCTAssertTrue(prompt.contains("[truncated]"))
+        XCTAssertFalse(prompt.contains(huge))
+    }
+
     func testDesignSystemSectionPlacedBeforeLayoutRules() {
         let snapshot = DesignSystemSnapshot(
             companyBlurb: "Acme",
