@@ -59,4 +59,27 @@ final class KeychainOAuthTokensTests: XCTestCase {
         KeychainHelper.deleteOAuthTokens(for: .figma)
         XCTAssertNil(KeychainHelper.loadOAuthTokens(for: .figma))
     }
+
+    // MARK: - Client Registration
+
+    func testRegistrationRoundTrip() {
+        let reg = KeychainHelper.OAuthClientRegistration(
+            clientID: "client-abc",
+            authorizationEndpoint: URL(string: "https://example.com/authorize")!,
+            tokenEndpoint: URL(string: "https://example.com/token")!,
+            registrationEndpoint: URL(string: "https://example.com/register")!,
+            resource: URL(string: "https://mcp.example.com/mcp")!,
+            supportedScopes: ["read", "write"]
+        )
+        XCTAssertTrue(KeychainHelper.saveOAuthRegistration(reg, for: .figma))
+
+        let loaded = KeychainHelper.loadOAuthRegistration(for: .figma)
+        XCTAssertEqual(loaded?.clientID, "client-abc")
+        XCTAssertEqual(loaded?.tokenEndpoint.absoluteString, "https://example.com/token")
+        XCTAssertEqual(loaded?.resource?.absoluteString, "https://mcp.example.com/mcp")
+        XCTAssertEqual(loaded?.supportedScopes, ["read", "write"])
+
+        KeychainHelper.deleteOAuthRegistration(for: .figma)
+        XCTAssertNil(KeychainHelper.loadOAuthRegistration(for: .figma))
+    }
 }

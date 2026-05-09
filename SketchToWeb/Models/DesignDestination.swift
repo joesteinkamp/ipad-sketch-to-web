@@ -3,9 +3,9 @@ import Foundation
 /// A remote design tool that the app can hand off the generated sketch + code to
 /// for native rendering as an editable design.
 ///
-/// Each destination owns its MCP endpoint, OAuth configuration, and presentation
-/// metadata. New destinations (Paper, Pencil, etc.) can be added as cases as they
-/// expose remote MCP servers.
+/// Each destination owns its MCP endpoint and presentation metadata. Authorization
+/// is discovered at connect time via MCP's OAuth flow (RFC 9728 + RFC 7591 DCR),
+/// so no developer-app credentials are baked in.
 enum DesignDestination: String, CaseIterable, Identifiable, Codable, Sendable {
     case figma
 
@@ -46,50 +46,45 @@ enum DesignDestination: String, CaseIterable, Identifiable, Codable, Sendable {
         }
     }
 
-    // MARK: - OAuth
-
-    /// OAuth endpoints and scope required to obtain a token for the destination's MCP.
-    var oauthConfig: OAuthConfig {
+    /// Custom URL scheme used as the OAuth redirect. The scheme alone is enough
+    /// for `ASWebAuthenticationSession` — no Info.plist registration required.
+    var oauthRedirectURI: String {
         switch self {
         case .figma:
-            return OAuthConfig(
-                authorizeURL: URL(string: "https://www.figma.com/oauth")!,
-                tokenURL: URL(string: "https://www.figma.com/api/oauth/token")!,
-                clientID: AppConstants.figmaOAuthClientID,
-                redirectURI: "sketchtoweb://oauth/figma",
-                scopes: ["files:read", "file_content:read", "file_content:write"]
-            )
+            return "sketchtoweb://oauth/figma"
+        }
+    }
+
+    /// Human-readable client name advertised during Dynamic Client Registration.
+    var oauthClientName: String {
+        switch self {
+        case .figma:
+            return "Sketch to Web (iPad)"
         }
     }
 
     // MARK: - Keychain Keys
 
     /// Account identifiers used by `KeychainHelper` to namespace this destination's
-    /// access token, refresh token, and expiry.
+    /// access token, refresh token, expiry, and DCR client registration.
     var keychainKeys: KeychainKeys {
         switch self {
         case .figma:
             return KeychainKeys(
                 accessToken: "figma-oauth-access",
                 refreshToken: "figma-oauth-refresh",
-                expiry: "figma-oauth-expiry"
+                expiry: "figma-oauth-expiry",
+                registration: "figma-oauth-registration"
             )
         }
     }
 
     // MARK: - Supporting Types
 
-    struct OAuthConfig: Sendable {
-        let authorizeURL: URL
-        let tokenURL: URL
-        let clientID: String
-        let redirectURI: String
-        let scopes: [String]
-    }
-
     struct KeychainKeys: Sendable {
         let accessToken: String
         let refreshToken: String
         let expiry: String
+        let registration: String
     }
 }

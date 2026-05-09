@@ -3,12 +3,22 @@ import AuthenticationServices
 import CryptoKit
 import UIKit
 
-/// OAuth 2.0 + PKCE (S256) flow for connecting to Figma's account, used to obtain
-/// the bearer token that authorizes calls to the Figma remote MCP server at
-/// https://mcp.figma.com/mcp.
+/// MCP-style OAuth client for Figma's remote MCP server at
+/// `https://mcp.figma.com/mcp`. Uses the standard MCP authorization flow:
 ///
-/// Tokens are persisted via `KeychainHelper.saveOAuthTokens(_:for:)`. Callers
-/// should use `currentAccessToken()` which transparently refreshes when expired.
+/// 1. **Discovery** (RFC 9728) — fetch protected-resource metadata, then the
+///    authorization server's metadata (RFC 8414), to learn the authorize / token
+///    / registration endpoints.
+/// 2. **Dynamic Client Registration** (RFC 7591) — register this app as a public
+///    client at runtime; no developer-app credentials are baked in.
+/// 3. **Authorization Code + PKCE** — present an `ASWebAuthenticationSession`
+///    sheet so the user signs in to Figma in a browser, then exchange the code
+///    for an access + refresh token.
+///
+/// Tokens land in the Keychain via `KeychainHelper.saveOAuthTokens(_:for:)` and
+/// the discovery + registration result via
+/// `KeychainHelper.saveOAuthRegistration(_:for:)`. Callers should use
+/// `currentAccessToken()`, which transparently refreshes when expired.
 @MainActor
 final class FigmaOAuth: NSObject {
 
@@ -20,9 +30,11 @@ final class FigmaOAuth: NSObject {
     // MARK: - Errors
 
     enum OAuthError: LocalizedError {
-        case missingClientID
+        case discoveryFailed(String)
+        case registrationFailed(String)
         case userCancelled
         case invalidCallback
+        case stateMismatch
         case missingCode
         case missingAccessToken
         case noStoredToken
@@ -32,12 +44,16 @@ final class FigmaOAuth: NSObject {
 
         var errorDescription: String? {
             switch self {
-            case .missingClientID:
-                return "Figma OAuth is not configured. Set FIGMA_OAUTH_CLIENT_ID in the app's Info.plist."
+            case .discoveryFailed(let message):
+                return "Could not discover Figma's OAuth server: \(message)"
+            case .registrationFailed(let message):
+                return "Could not register the app with Figma: \(message)"
             case .userCancelled:
                 return "Figma sign-in was cancelled."
             case .invalidCallback:
                 return "Figma returned an invalid callback URL."
+            case .stateMismatch:
+                return "OAuth state did not match — aborting for safety."
             case .missingCode:
                 return "Figma did not return an authorization code."
             case .missingAccessToken:
@@ -61,35 +77,33 @@ final class FigmaOAuth: NSObject {
         KeychainHelper.loadOAuthTokens(for: destination) != nil
     }
 
-    /// Starts the browser-based OAuth flow, persists the resulting tokens, and
-    /// returns the access token on success.
+    /// Runs discovery + DCR (if needed) + the browser-based authorization flow,
+    /// persists the resulting tokens, and returns the access token.
     @discardableResult
     func connect() async throws -> String {
-        let config = destination.oauthConfig
-        guard config.clientID != "REPLACE_WITH_FIGMA_CLIENT_ID", !config.clientID.isEmpty else {
-            throw OAuthError.missingClientID
-        }
-
+        let registration = try await ensureClientRegistered()
         let pkce = PKCE.generate()
         let state = UUID().uuidString
 
-        let authURL = try buildAuthorizeURL(config: config, pkce: pkce, state: state)
-        let callbackScheme = scheme(from: config.redirectURI)
-        let callbackURL = try await presentAuthSession(authURL: authURL, callbackScheme: callbackScheme)
-
+        let authURL = try buildAuthorizeURL(registration: registration, pkce: pkce, state: state)
+        let scheme = oauthCallbackScheme()
+        let callbackURL = try await presentAuthSession(authURL: authURL, callbackScheme: scheme)
         let code = try extractAuthorizationCode(from: callbackURL, expectedState: state)
-        let bundle = try await exchangeCodeForToken(code: code, pkce: pkce, config: config)
+
+        let bundle = try await exchangeCodeForToken(code: code, pkce: pkce, registration: registration)
         KeychainHelper.saveOAuthTokens(bundle, for: destination)
         return bundle.accessToken
     }
 
-    /// Clears stored tokens and signs the user out locally.
+    /// Clears stored tokens and the client registration, signing the user out
+    /// locally. The next `connect()` will re-run discovery + DCR.
     func disconnect() {
         KeychainHelper.deleteOAuthTokens(for: destination)
+        KeychainHelper.deleteOAuthRegistration(for: destination)
     }
 
     /// Returns a valid access token, refreshing it if expired. Throws
-    /// `OAuthError.noStoredToken` if the user has not connected.
+    /// `OAuthError.noStoredToken` if the user hasn't connected.
     func currentAccessToken() async throws -> String {
         guard let bundle = KeychainHelper.loadOAuthTokens(for: destination) else {
             throw OAuthError.noStoredToken
@@ -100,67 +114,171 @@ final class FigmaOAuth: NSObject {
         return bundle.accessToken
     }
 
-    // MARK: - Refresh
+    // MARK: - Discovery + DCR
 
-    private func isExpired(_ bundle: KeychainHelper.OAuthTokenBundle) -> Bool {
-        guard let expiresAt = bundle.expiresAt else { return false }
-        // Refresh 60s early to avoid races.
-        return Date().timeIntervalSince1970 >= (expiresAt - 60)
-    }
-
-    private func refresh(bundle: KeychainHelper.OAuthTokenBundle) async throws -> String {
-        guard let refreshToken = bundle.refreshToken else {
-            throw OAuthError.refreshFailed("No refresh token available; please reconnect.")
+    private func ensureClientRegistered() async throws -> KeychainHelper.OAuthClientRegistration {
+        if let cached = KeychainHelper.loadOAuthRegistration(for: destination) {
+            return cached
         }
-        let config = destination.oauthConfig
 
-        var request = URLRequest(url: config.tokenURL)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        let params: [String: String] = [
-            "grant_type": "refresh_token",
-            "refresh_token": refreshToken,
-            "client_id": config.clientID
-        ]
-        request.httpBody = encodeForm(params).data(using: .utf8)
+        let metadata = try await discoverAuthorizationServer()
+        let clientID = try await registerClient(metadata: metadata)
 
-        let new = try await postTokenRequest(request)
-        // Carry over the existing refresh token if Figma omits it on refresh.
-        let merged = KeychainHelper.OAuthTokenBundle(
-            accessToken: new.accessToken,
-            refreshToken: new.refreshToken ?? bundle.refreshToken,
-            expiresAt: new.expiresAt
+        let registration = KeychainHelper.OAuthClientRegistration(
+            clientID: clientID,
+            authorizationEndpoint: metadata.authorizationEndpoint,
+            tokenEndpoint: metadata.tokenEndpoint,
+            registrationEndpoint: metadata.registrationEndpoint,
+            resource: metadata.resource,
+            supportedScopes: metadata.scopesSupported
         )
-        KeychainHelper.saveOAuthTokens(merged, for: destination)
-        return merged.accessToken
+        KeychainHelper.saveOAuthRegistration(registration, for: destination)
+        return registration
     }
 
-    // MARK: - Authorization URL
+    /// Resolves the authorization server starting from the MCP endpoint.
+    /// Tries protected-resource metadata first (RFC 9728), then falls back to
+    /// treating the MCP origin as its own authorization server.
+    private func discoverAuthorizationServer() async throws -> AuthorizationServerMetadata {
+        let mcp = destination.mcpEndpoint
+
+        var authServerURL: URL?
+        var resource: URL?
+
+        if let prm = try? await fetchProtectedResourceMetadata(mcp: mcp) {
+            resource = prm.resource ?? mcp
+            authServerURL = prm.authorizationServers.first
+        }
+
+        let asBase = authServerURL ?? originURL(of: mcp)
+
+        let asMetadata = try await fetchAuthorizationServerMetadata(base: asBase)
+        return AuthorizationServerMetadata(
+            authorizationEndpoint: asMetadata.authorizationEndpoint,
+            tokenEndpoint: asMetadata.tokenEndpoint,
+            registrationEndpoint: asMetadata.registrationEndpoint,
+            scopesSupported: asMetadata.scopesSupported,
+            resource: resource ?? mcp
+        )
+    }
+
+    private func fetchProtectedResourceMetadata(mcp: URL) async throws -> ProtectedResourceMetadata {
+        var components = URLComponents(url: mcp, resolvingAgainstBaseURL: false)!
+        components.path = "/.well-known/oauth-protected-resource"
+        components.query = nil
+        guard let url = components.url else {
+            throw OAuthError.discoveryFailed("Could not derive PRM URL")
+        }
+        let json = try await getJSON(from: url)
+        let resourceString = json["resource"] as? String
+        let servers = (json["authorization_servers"] as? [String]) ?? []
+        let serverURLs = servers.compactMap(URL.init(string:))
+        return ProtectedResourceMetadata(
+            resource: resourceString.flatMap(URL.init(string:)),
+            authorizationServers: serverURLs
+        )
+    }
+
+    private func fetchAuthorizationServerMetadata(base: URL) async throws -> AuthorizationServerWireMetadata {
+        // RFC 8414 well-known location, with OpenID Connect Discovery as fallback.
+        let candidates = [
+            base.appendingPathComponent(".well-known/oauth-authorization-server"),
+            base.appendingPathComponent(".well-known/openid-configuration")
+        ]
+        var lastError: Error?
+        for url in candidates {
+            do {
+                let json = try await getJSON(from: url)
+                guard
+                    let authStr = json["authorization_endpoint"] as? String,
+                    let tokenStr = json["token_endpoint"] as? String,
+                    let authURL = URL(string: authStr),
+                    let tokenURL = URL(string: tokenStr)
+                else { continue }
+                let regURL = (json["registration_endpoint"] as? String).flatMap(URL.init(string:))
+                let scopes = (json["scopes_supported"] as? [String]) ?? []
+                return AuthorizationServerWireMetadata(
+                    authorizationEndpoint: authURL,
+                    tokenEndpoint: tokenURL,
+                    registrationEndpoint: regURL,
+                    scopesSupported: scopes
+                )
+            } catch {
+                lastError = error
+                continue
+            }
+        }
+        throw OAuthError.discoveryFailed(
+            (lastError as? LocalizedError)?.errorDescription ?? "No metadata at \(base)"
+        )
+    }
+
+    private func registerClient(metadata: AuthorizationServerMetadata) async throws -> String {
+        guard let regURL = metadata.registrationEndpoint else {
+            throw OAuthError.registrationFailed(
+                "Authorization server does not support Dynamic Client Registration."
+            )
+        }
+
+        let body: [String: Any] = [
+            "client_name": destination.oauthClientName,
+            "redirect_uris": [destination.oauthRedirectURI],
+            "grant_types": ["authorization_code", "refresh_token"],
+            "response_types": ["code"],
+            "token_endpoint_auth_method": "none",
+            "application_type": "native"
+        ]
+
+        var request = URLRequest(url: regURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await dataRequest(request)
+        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            let detail = String(data: data, encoding: .utf8) ?? "HTTP \(status)"
+            throw OAuthError.registrationFailed("HTTP \(status): \(detail)")
+        }
+
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let clientID = json["client_id"] as? String else {
+            throw OAuthError.registrationFailed("Registration response missing client_id")
+        }
+        return clientID
+    }
+
+    // MARK: - Authorization
 
     private func buildAuthorizeURL(
-        config: DesignDestination.OAuthConfig,
+        registration: KeychainHelper.OAuthClientRegistration,
         pkce: PKCE,
         state: String
     ) throws -> URL {
-        var components = URLComponents(url: config.authorizeURL, resolvingAgainstBaseURL: false)
-        components?.queryItems = [
-            URLQueryItem(name: "client_id", value: config.clientID),
-            URLQueryItem(name: "redirect_uri", value: config.redirectURI),
-            URLQueryItem(name: "scope", value: config.scopes.joined(separator: " ")),
-            URLQueryItem(name: "state", value: state),
+        var components = URLComponents(url: registration.authorizationEndpoint, resolvingAgainstBaseURL: false)
+        var items: [URLQueryItem] = [
+            URLQueryItem(name: "client_id", value: registration.clientID),
+            URLQueryItem(name: "redirect_uri", value: destination.oauthRedirectURI),
             URLQueryItem(name: "response_type", value: "code"),
+            URLQueryItem(name: "state", value: state),
             URLQueryItem(name: "code_challenge", value: pkce.challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256")
         ]
+        if !registration.supportedScopes.isEmpty {
+            items.append(URLQueryItem(name: "scope", value: registration.supportedScopes.joined(separator: " ")))
+        }
+        if let resource = registration.resource {
+            items.append(URLQueryItem(name: "resource", value: resource.absoluteString))
+        }
+        components?.queryItems = items
         guard let url = components?.url else { throw OAuthError.invalidCallback }
         return url
     }
 
-    private func scheme(from redirectURI: String) -> String {
-        URL(string: redirectURI)?.scheme ?? "sketchtoweb"
+    private func oauthCallbackScheme() -> String {
+        URL(string: destination.oauthRedirectURI)?.scheme ?? "sketchtoweb"
     }
-
-    // MARK: - Web Auth Session
 
     private func presentAuthSession(authURL: URL, callbackScheme: String) async throws -> URL {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
@@ -191,8 +309,6 @@ final class FigmaOAuth: NSObject {
         }
     }
 
-    // MARK: - Code Extraction
-
     private func extractAuthorizationCode(from url: URL, expectedState: String) throws -> String {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let queryItems = components.queryItems else {
@@ -200,10 +316,11 @@ final class FigmaOAuth: NSObject {
         }
         if let returnedState = queryItems.first(where: { $0.name == "state" })?.value,
            returnedState != expectedState {
-            throw OAuthError.invalidCallback
+            throw OAuthError.stateMismatch
         }
         if let errorParam = queryItems.first(where: { $0.name == "error" })?.value {
-            throw OAuthError.server(0, errorParam)
+            let description = queryItems.first(where: { $0.name == "error_description" })?.value
+            throw OAuthError.server(0, description ?? errorParam)
         }
         guard let code = queryItems.first(where: { $0.name == "code" })?.value else {
             throw OAuthError.missingCode
@@ -211,36 +328,58 @@ final class FigmaOAuth: NSObject {
         return code
     }
 
-    // MARK: - Token Exchange
+    // MARK: - Token Exchange + Refresh
 
     private func exchangeCodeForToken(
         code: String,
         pkce: PKCE,
-        config: DesignDestination.OAuthConfig
+        registration: KeychainHelper.OAuthClientRegistration
     ) async throws -> KeychainHelper.OAuthTokenBundle {
-        var request = URLRequest(url: config.tokenURL)
-        request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        let params: [String: String] = [
+        var params: [String: String] = [
             "grant_type": "authorization_code",
             "code": code,
-            "client_id": config.clientID,
-            "redirect_uri": config.redirectURI,
+            "client_id": registration.clientID,
+            "redirect_uri": destination.oauthRedirectURI,
             "code_verifier": pkce.verifier
         ]
-        request.httpBody = encodeForm(params).data(using: .utf8)
+        if let resource = registration.resource {
+            params["resource"] = resource.absoluteString
+        }
+
+        let request = formURLEncodedPOST(url: registration.tokenEndpoint, params: params)
         return try await postTokenRequest(request)
     }
 
-    private func postTokenRequest(_ request: URLRequest) async throws -> KeychainHelper.OAuthTokenBundle {
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            throw OAuthError.network(error)
+    private func refresh(bundle: KeychainHelper.OAuthTokenBundle) async throws -> String {
+        guard let registration = KeychainHelper.loadOAuthRegistration(for: destination) else {
+            throw OAuthError.refreshFailed("Lost client registration; please reconnect.")
+        }
+        guard let refreshToken = bundle.refreshToken else {
+            throw OAuthError.refreshFailed("No refresh token available; please reconnect.")
         }
 
+        var params: [String: String] = [
+            "grant_type": "refresh_token",
+            "refresh_token": refreshToken,
+            "client_id": registration.clientID
+        ]
+        if let resource = registration.resource {
+            params["resource"] = resource.absoluteString
+        }
+
+        let request = formURLEncodedPOST(url: registration.tokenEndpoint, params: params)
+        let new = try await postTokenRequest(request)
+        let merged = KeychainHelper.OAuthTokenBundle(
+            accessToken: new.accessToken,
+            refreshToken: new.refreshToken ?? bundle.refreshToken,
+            expiresAt: new.expiresAt
+        )
+        KeychainHelper.saveOAuthTokens(merged, for: destination)
+        return merged.accessToken
+    }
+
+    private func postTokenRequest(_ request: URLRequest) async throws -> KeychainHelper.OAuthTokenBundle {
+        let (data, response) = try await dataRequest(request)
         guard let http = response as? HTTPURLResponse else {
             throw OAuthError.server(-1, "Invalid HTTP response")
         }
@@ -248,7 +387,6 @@ final class FigmaOAuth: NSObject {
             let message = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
             throw OAuthError.server(http.statusCode, message)
         }
-
         return try parseTokenResponse(data)
     }
 
@@ -277,15 +415,81 @@ final class FigmaOAuth: NSObject {
 
     // MARK: - Helpers
 
-    private func encodeForm(_ params: [String: String]) -> String {
-        params
+    private func isExpired(_ bundle: KeychainHelper.OAuthTokenBundle) -> Bool {
+        guard let expiresAt = bundle.expiresAt else { return false }
+        // Refresh 60s early to avoid races.
+        return Date().timeIntervalSince1970 >= (expiresAt - 60)
+    }
+
+    private func originURL(of url: URL) -> URL {
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = url.host
+        components.port = url.port
+        return components.url ?? url
+    }
+
+    private func dataRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        do {
+            return try await URLSession.shared.data(for: request)
+        } catch {
+            throw OAuthError.network(error)
+        }
+    }
+
+    private func getJSON(from url: URL) async throws -> [String: Any] {
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, response) = try await dataRequest(request)
+        guard let http = response as? HTTPURLResponse else {
+            throw OAuthError.discoveryFailed("Invalid response from \(url)")
+        }
+        guard (200...299).contains(http.statusCode) else {
+            throw OAuthError.discoveryFailed("HTTP \(http.statusCode) from \(url)")
+        }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw OAuthError.discoveryFailed("Body from \(url) is not JSON")
+        }
+        return json
+    }
+
+    private func formURLEncodedPOST(url: URL, params: [String: String]) -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let body = params
             .map { key, value in
-                let encodedKey = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key
-                let encodedValue = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
-                return "\(encodedKey)=\(encodedValue)"
+                let k = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key
+                let v = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
+                return "\(k)=\(v)"
             }
             .joined(separator: "&")
+        request.httpBody = body.data(using: .utf8)
+        return request
     }
+}
+
+// MARK: - Discovery types
+
+private struct ProtectedResourceMetadata {
+    let resource: URL?
+    let authorizationServers: [URL]
+}
+
+private struct AuthorizationServerWireMetadata {
+    let authorizationEndpoint: URL
+    let tokenEndpoint: URL
+    let registrationEndpoint: URL?
+    let scopesSupported: [String]
+}
+
+private struct AuthorizationServerMetadata {
+    let authorizationEndpoint: URL
+    let tokenEndpoint: URL
+    let registrationEndpoint: URL?
+    let scopesSupported: [String]
+    let resource: URL?
 }
 
 // MARK: - PKCE
