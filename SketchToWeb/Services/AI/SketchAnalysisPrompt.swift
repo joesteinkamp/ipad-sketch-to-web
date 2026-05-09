@@ -146,6 +146,12 @@ enum SketchAnalysisPrompt {
 
         """
 
+        if let presetName = ds.presetName,
+           let presetBody = ds.presetContent,
+           !presetBody.isEmpty {
+            section += "## Design Preset: \(presetName)\n\(truncate(presetBody, limit: 6000))\n\n"
+        }
+
         if !ds.companyBlurb.isEmpty {
             section += "## About\n\(ds.companyBlurb)\n\n"
         }
