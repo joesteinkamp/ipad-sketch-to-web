@@ -40,16 +40,19 @@ final class AIConversionPipeline: Sendable {
 
     // MARK: - Properties
 
-    let client: GeminiClient
+    let client: any GeminiAPI
 
     // MARK: - Initialization
 
-    /// Creates a new pipeline with the given API key.
-    ///
-    /// - Parameter apiKey: Your Google AI / Gemini API key.
-    /// - Parameter model: Optional model override. Defaults to the client's default model.
-    init(apiKey: String, model: String = "gemini-3.1-pro-preview") {
-        self.client = GeminiClient(apiKey: apiKey, model: model)
+    /// Creates a new pipeline with an injected client. Tests should use this initializer
+    /// to substitute a mock; production code should call `live(apiKey:model:)` instead.
+    init(client: any GeminiAPI) {
+        self.client = client
+    }
+
+    /// Convenience factory that wires up a real `GeminiClient` for production use.
+    static func live(apiKey: String, model: String = "gemini-3.1-pro-preview") -> AIConversionPipeline {
+        AIConversionPipeline(client: GeminiClient(apiKey: apiKey, model: model))
     }
 
     // MARK: - Conversion
@@ -141,13 +144,21 @@ final class AIConversionPipeline: Sendable {
             return AsyncThrowingStream { $0.finish(throwing: error) }
         }
 
-        let client = self.client
+        // Streaming requires SSE support, which is concrete to `GeminiClient`.
+        // Non-streaming `convert(...)` works through the protocol seam; tests
+        // should exercise that path. Streaming-mock support is a follow-up.
+        guard let streamingClient = self.client as? GeminiClient else {
+            return AsyncThrowingStream { continuation in
+                let fallback = AppError.unknown("Streaming requires a concrete GeminiClient.")
+                continuation.finish(throwing: fallback)
+            }
+        }
 
         return AsyncThrowingStream { continuation in
             Task {
                 do {
                     var finalText = ""
-                    for try await accumulated in client.streamMessage(
+                    for try await accumulated in streamingClient.streamMessage(
                         systemPrompt: systemPrompt,
                         imageData: pngData,
                         userText: userPrompt
