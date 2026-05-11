@@ -5,7 +5,7 @@ import Security
 /// small blobs of sensitive data (e.g. API keys).
 enum KeychainHelper {
 
-    private static let serviceName = "com.sketchtoweb.gemini-apikey"
+    nonisolated private static let serviceName = "com.sketchtoweb.gemini-apikey"
 
     // MARK: - Generic Operations
 
@@ -70,7 +70,7 @@ enum KeychainHelper {
 
     // MARK: - API Key Convenience
 
-    private static let apiKeyAccount = "gemini-api-key"
+    nonisolated private static let apiKeyAccount = "gemini-api-key"
 
     /// Persists a Gemini API key in the keychain.
     ///

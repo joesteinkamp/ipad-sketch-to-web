@@ -337,7 +337,7 @@ extension FigmaOAuth: ASWebAuthenticationPresentationContextProviding {
             if let windowScene = scenes.compactMap({ $0 as? UIWindowScene }).first {
                 return ASPresentationAnchor(windowScene: windowScene)
             }
-            return ASPresentationAnchor(frame: .zero)
+            preconditionFailure("ASWebAuthenticationSession requires an active UIWindowScene")
         }
     }
 }
