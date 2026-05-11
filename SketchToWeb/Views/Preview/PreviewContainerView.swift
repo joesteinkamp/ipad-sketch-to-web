@@ -102,17 +102,37 @@ struct PreviewContainerView: View {
 
     // MARK: - Theme Menu
 
+    // Picker-in-Menu is flaky on iPadOS (selection often doesn't write back
+    // to the binding, with a "updateVisibleMenuWithBlock while no context
+    // menu is visible" console warning). Explicit Buttons inside Sections
+    // write through reliably, so the preview actually re-themes on toggle.
     @ViewBuilder
     private var themeMenu: some View {
         Menu {
-            Picker("Base color", selection: $shadcnBaseColor) {
+            Section("Base color") {
                 ForEach(ShadcnBaseColor.allCases) { color in
-                    Text(color.displayName).tag(color.rawValue)
+                    Button {
+                        shadcnBaseColor = color.rawValue
+                    } label: {
+                        if shadcnBaseColor == color.rawValue {
+                            Label(color.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(color.displayName)
+                        }
+                    }
                 }
             }
-            Picker("Mode", selection: $themeAppearance) {
+            Section("Mode") {
                 ForEach(ThemeAppearance.allCases) { appearance in
-                    Text(appearance.displayName).tag(appearance.rawValue)
+                    Button {
+                        themeAppearance = appearance.rawValue
+                    } label: {
+                        if themeAppearance == appearance.rawValue {
+                            Label(appearance.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(appearance.displayName)
+                        }
+                    }
                 }
             }
         } label: {
