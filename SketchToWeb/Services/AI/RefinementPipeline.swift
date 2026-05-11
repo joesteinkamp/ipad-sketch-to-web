@@ -37,7 +37,7 @@ final class RefinementPipeline: Sendable {
     }
 
     /// Convenience factory that wires up a real `GeminiClient` for production use.
-    static func live(apiKey: String, model: String = "gemini-3.1-pro-preview") -> RefinementPipeline {
+    nonisolated static func live(apiKey: String, model: String = "gemini-3.1-pro-preview") -> RefinementPipeline {
         RefinementPipeline(client: GeminiClient(apiKey: apiKey, model: model))
     }
 

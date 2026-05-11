@@ -333,7 +333,11 @@ extension FigmaOAuth: ASWebAuthenticationPresentationContextProviding {
                     return window
                 }
             }
-            return ASPresentationAnchor()
+            // Fallback: use the first available UIWindowScene to construct an anchor.
+            if let windowScene = scenes.compactMap({ $0 as? UIWindowScene }).first {
+                return ASPresentationAnchor(windowScene: windowScene)
+            }
+            return ASPresentationAnchor(frame: .zero)
         }
     }
 }

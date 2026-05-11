@@ -152,7 +152,7 @@ extension GeminiClient {
             }
         }
 
-        let functionDeclarations: [[String: Any]] = try tools.map { tool in
+        let functionDeclarations: [[String: Any]] = tools.map { tool in
             let schema = (try? JSONSerialization.jsonObject(with: tool.parametersJSONSchema)) ?? [:]
             return [
                 "name": tool.name,

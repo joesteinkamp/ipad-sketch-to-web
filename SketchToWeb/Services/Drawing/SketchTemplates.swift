@@ -371,10 +371,10 @@ enum SketchTemplates {
     /// All available templates.
     @MainActor
     static let all: [Template] = [
-        Template(name: "Login Form", iconName: "person.crop.square", generator: loginForm),
-        Template(name: "Dashboard", iconName: "chart.bar.doc.horizontal", generator: dashboard),
-        Template(name: "Landing Page", iconName: "globe", generator: landingPage),
-        Template(name: "Settings Page", iconName: "gearshape", generator: settingsPage),
-        Template(name: "Pricing Page", iconName: "tag", generator: pricingPage),
+        Template(name: "Login Form", iconName: "person.crop.square", generator: { loginForm(canvasSize: $0) }),
+        Template(name: "Dashboard", iconName: "chart.bar.doc.horizontal", generator: { dashboard(canvasSize: $0) }),
+        Template(name: "Landing Page", iconName: "globe", generator: { landingPage(canvasSize: $0) }),
+        Template(name: "Settings Page", iconName: "gearshape", generator: { settingsPage(canvasSize: $0) }),
+        Template(name: "Pricing Page", iconName: "tag", generator: { pricingPage(canvasSize: $0) }),
     ]
 }

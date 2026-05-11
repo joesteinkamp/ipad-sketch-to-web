@@ -186,7 +186,7 @@ final class AIConversionPipeline: Sendable {
     @MainActor
     private func renderDrawingAsPNG(drawing: PKDrawing, canvasSize: CGSize) throws -> Data {
         let rect = CGRect(origin: .zero, size: canvasSize)
-        let scale: CGFloat = min(UIScreen.main.scale, 2.0) // Cap at 2x to limit payload size.
+        let scale: CGFloat = min(UITraitCollection.current.displayScale, 2.0) // Cap at 2x to limit payload size.
 
         let renderer = UIGraphicsImageRenderer(size: canvasSize)
         let image = renderer.image { context in
