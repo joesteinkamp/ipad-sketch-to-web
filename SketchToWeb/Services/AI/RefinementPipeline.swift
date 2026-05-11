@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Handles iterative refinement of generated UI code based on user annotations.
 ///
