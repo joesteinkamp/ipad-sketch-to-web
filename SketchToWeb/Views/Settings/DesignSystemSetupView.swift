@@ -250,11 +250,11 @@ private struct DesignSystemEditorView: View {
 
     @ViewBuilder
     private var markdownRow: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Label("Upload DESIGN.md", systemImage: "doc.text")
+                Label("Paste or upload DESIGN.md", systemImage: "doc.text")
                 Spacer()
-                Button(designSystem.markdownContent == nil ? "Choose…" : "Replace") {
+                Button(designSystem.markdownFilename == nil ? "Upload…" : "Replace") {
                     showMarkdownPicker = true
                 }
                 .buttonStyle(.bordered)
@@ -262,11 +262,14 @@ private struct DesignSystemEditorView: View {
             }
             if let name = designSystem.markdownFilename {
                 attachedRow(name: name) {
-                    designSystem.markdownContent = nil
                     designSystem.markdownFilename = nil
                     designSystem.updatedAt = Date()
                 }
             }
+            markdownEditor
+            Text("Paste markdown directly, or upload a file. Editing here keeps your content even after upload.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .fileImporter(
             isPresented: $showMarkdownPicker,
@@ -274,6 +277,42 @@ private struct DesignSystemEditorView: View {
             allowsMultipleSelection: false
         ) { result in
             handleMarkdownPick(result)
+        }
+    }
+
+    @ViewBuilder
+    private var markdownEditor: some View {
+        let binding = Binding(
+            get: { designSystem.markdownContent ?? "" },
+            set: { newValue in
+                designSystem.markdownContent = newValue.isEmpty ? nil : newValue
+                if newValue.isEmpty {
+                    designSystem.markdownFilename = nil
+                }
+                designSystem.updatedAt = Date()
+            }
+        )
+
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: binding)
+                .font(.callout.monospaced())
+                .frame(minHeight: 120)
+                .scrollContentBackground(.hidden)
+                .padding(4)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                )
+
+            if (designSystem.markdownContent ?? "").isEmpty {
+                Text("# Your DESIGN.md\n\nColors, typography, spacing, components…")
+                    .font(.callout.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 12)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
