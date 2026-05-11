@@ -1,29 +1,26 @@
 import SwiftUI
-import PencilKit
 import WebKit
 
-/// A view that layers a transparent PencilKit annotation canvas on top of the web preview.
+/// A view that layers a comment-pin overlay on top of the web preview.
 ///
-/// Users start in `.idle` mode showing a single "Annotate" entry point. Tapping it reveals
-/// a toolbar with a Draw / Comment picker. Draw mode enables a red Pencil overlay; Comment
-/// mode lets the user drop numbered Figma-style pins and type detailed instructions. Tapping
-/// "Refine" composites the strokes + pins onto a screenshot and sends it (with the typed
-/// comments) back to the AI for an iterative refinement pass.
+/// Users start in `.idle` mode showing a single "Annotate" entry point. Tapping it
+/// switches to comment mode, where the user can tap to drop numbered Figma-style pins
+/// and type detailed instructions. Tapping "Refine" composites the numbered pins onto
+/// a screenshot and sends it (with the typed comments) back to the AI for an iterative
+/// refinement pass.
 struct AnnotatablePreviewView: View {
     let htmlContent: String
     @EnvironmentObject var appState: AppState
 
     @State private var mode: AnnotationMode = .idle
-    @State private var annotationDrawing = PKDrawing()
     @State private var comments: [PreviewComment] = []
     @State private var editingCommentID: UUID?
 
-    /// References to the underlying UIKit views, set via the representable coordinators.
+    /// Reference to the underlying WKWebView, set via the representable coordinator.
     @State private var webViewReference: WKWebView?
-    @State private var canvasViewReference: PKCanvasView?
 
     private var hasAnnotations: Bool {
-        !annotationDrawing.strokes.isEmpty || !comments.isEmpty
+        !comments.isEmpty
     }
 
     var body: some View {
@@ -34,23 +31,13 @@ struct AnnotatablePreviewView: View {
                 webViewRef: $webViewReference
             )
 
-            // Layer 2: PencilKit overlay (draw mode only).
-            if mode == .draw {
-                AnnotationCanvasView(
-                    drawing: $annotationDrawing,
-                    canvasViewRef: $canvasViewReference
-                )
-                .allowsHitTesting(true)
-            }
-
-            // Layer 3: Comment pins + tap-to-add (visible whenever annotating).
-            if mode != .idle {
+            // Layer 2: Comment pins + tap-to-add (visible whenever annotating).
+            if mode == .comment {
                 CommentOverlay(
                     comments: $comments,
                     editingID: $editingCommentID,
-                    isInteractive: mode == .comment
+                    isInteractive: true
                 )
-                .allowsHitTesting(mode == .comment)
             }
         }
         .loadingOverlay(isPresented: appState.isRefining, message: "Refining UI...")
@@ -67,14 +54,14 @@ struct AnnotatablePreviewView: View {
         switch mode {
         case .idle:
             idleButton
-        case .draw, .comment:
+        case .comment:
             activeToolbar
         }
     }
 
     private var idleButton: some View {
         Button {
-            mode = .draw
+            mode = .comment
         } label: {
             Label("Annotate", systemImage: "pencil.tip.crop.circle")
                 .font(.subheadline.weight(.semibold))
@@ -96,13 +83,6 @@ struct AnnotatablePreviewView: View {
                     .foregroundStyle(.secondary)
             }
             .accessibilityLabel("Exit annotate mode")
-
-            Picker("Mode", selection: $mode) {
-                Text("Draw").tag(AnnotationMode.draw)
-                Text("Comment").tag(AnnotationMode.comment)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 200)
 
             Button {
                 captureAndRefine()
@@ -141,7 +121,6 @@ struct AnnotatablePreviewView: View {
     }
 
     private func clearAll() {
-        annotationDrawing = PKDrawing()
         comments = []
         editingCommentID = nil
     }
@@ -155,24 +134,15 @@ struct AnnotatablePreviewView: View {
         config.snapshotWidth = NSNumber(value: Double(webView.bounds.width))
 
         let canvasSize = webView.bounds.size
-        let scale = UIScreen.main.scale
-        let drawingSnapshot = annotationDrawing
         let commentsSnapshot = comments
 
         webView.takeSnapshot(with: config) { image, error in
             guard let webImage = image else { return }
 
-            // Composite the web snapshot, PencilKit annotations, and numbered pins.
+            // Composite the web snapshot and numbered pins.
             let renderer = UIGraphicsImageRenderer(size: canvasSize)
             let compositeImage = renderer.image { context in
                 webImage.draw(in: CGRect(origin: .zero, size: canvasSize))
-
-                let annotationImage = drawingSnapshot.image(
-                    from: CGRect(origin: .zero, size: canvasSize),
-                    scale: scale
-                )
-                annotationImage.draw(in: CGRect(origin: .zero, size: canvasSize))
-
                 Self.drawCommentPins(commentsSnapshot, in: context.cgContext)
             }
 
@@ -191,7 +161,6 @@ struct AnnotatablePreviewView: View {
                     canvasSize: canvasSize,
                     comments: commentTexts
                 )
-                annotationDrawing = PKDrawing()
                 comments = []
                 editingCommentID = nil
             }
@@ -235,7 +204,6 @@ struct AnnotatablePreviewView: View {
 
 enum AnnotationMode: Equatable {
     case idle
-    case draw
     case comment
 }
 
@@ -435,61 +403,5 @@ private struct SnapshotableWebPreviewView: UIViewRepresentable {
 
     final class Coordinator {
         var lastLoadedContent: String?
-    }
-}
-
-// MARK: - AnnotationCanvasView
-
-/// A transparent PencilKit canvas used as an annotation overlay.
-/// Uses a red pen by default to distinguish annotations from the original sketch.
-private struct AnnotationCanvasView: UIViewRepresentable {
-    @Binding var drawing: PKDrawing
-    @Binding var canvasViewRef: PKCanvasView?
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(drawing: $drawing)
-    }
-
-    func makeUIView(context: Context) -> PKCanvasView {
-        let canvasView = PKCanvasView()
-        canvasView.drawingPolicy = .pencilOnly
-        canvasView.backgroundColor = .clear
-        canvasView.isOpaque = false
-        canvasView.delegate = context.coordinator
-        canvasView.drawing = drawing
-
-        // Default tool: red pen, width 3 to visually distinguish from original sketch.
-        canvasView.tool = PKInkingTool(.pen, color: .systemRed, width: 3)
-
-        context.coordinator.canvasView = canvasView
-
-        DispatchQueue.main.async {
-            self.canvasViewRef = canvasView
-            canvasView.becomeFirstResponder()
-        }
-
-        return canvasView
-    }
-
-    func updateUIView(_ canvasView: PKCanvasView, context: Context) {
-        if canvasView.drawing.dataRepresentation() != drawing.dataRepresentation() {
-            canvasView.drawing = drawing
-        }
-    }
-
-    final class Coordinator: NSObject, PKCanvasViewDelegate {
-        var drawing: Binding<PKDrawing>
-        var canvasView: PKCanvasView?
-
-        init(drawing: Binding<PKDrawing>) {
-            self.drawing = drawing
-            super.init()
-        }
-
-        func canvasViewDrawingDidChange(_ canvasView: PKCanvasView) {
-            DispatchQueue.main.async { [weak self] in
-                self?.drawing.wrappedValue = canvasView.drawing
-            }
-        }
     }
 }

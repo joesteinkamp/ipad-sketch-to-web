@@ -35,12 +35,11 @@ Four components use UIViewRepresentable:
 
 ### Iterative Refinement
 
-`AnnotatablePreviewView` is a state machine (`AnnotationMode`: `.idle`, `.draw`, `.comment`). The idle state shows a single "Annotate" entry button. Tapping it reveals a toolbar with a Draw / Comment segmented picker, a Refine button, an overflow menu (Clear all), and an X to exit back to idle.
+`AnnotatablePreviewView` is a state machine (`AnnotationMode`: `.idle`, `.comment`). The idle state shows a single "Annotate" entry button. Tapping it switches to comment mode and reveals a toolbar with a Refine button, an overflow menu (Clear all), and an X to exit back to idle.
 
-- **Draw mode** layers a transparent PencilKit canvas (red pen) over the web preview for freehand strokes.
-- **Comment mode** lets the user tap to drop numbered Figma-style pins (`PreviewComment`) and type detailed instructions inline. Pins persist across mode switches.
+- **Comment mode** lets the user tap to drop numbered Figma-style pins (`PreviewComment`) and type detailed instructions inline.
 
-"Refine" captures a composite screenshot (WKWebView snapshot + PencilKit strokes + numbered pin overlays) and sends it to `RefinementPipeline.refine(currentCode:annotationImage:canvasSize:comments:designSystem:)` along with a `["Pin N: <text>"]` array describing each typed comment and the active `DesignSystemSnapshot`. Results push onto `AppState.generationHistory` with back/forward navigation.
+"Refine" captures a composite screenshot (WKWebView snapshot + numbered pin overlays) and sends it to `RefinementPipeline.refine(currentCode:annotationImage:canvasSize:comments:designSystem:)` along with a `["Pin N: <text>"]` array describing each typed comment and the active `DesignSystemSnapshot`. Results push onto `AppState.generationHistory` with back/forward navigation.
 
 ### API Key Storage
 
