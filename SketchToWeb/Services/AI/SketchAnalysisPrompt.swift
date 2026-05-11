@@ -42,6 +42,10 @@ enum SketchAnalysisPrompt {
             """
         }
 
+        if let iconSection = buildIconLibrarySection(designSystem?.iconLibrary) {
+            prompt += "\n" + iconSection
+        }
+
         if let designSystemSection = buildDesignSystemSection(designSystem) {
             prompt += "\n" + designSystemSection
         }
@@ -201,6 +205,41 @@ enum SketchAnalysisPrompt {
 
         if !ds.notes.isEmpty {
             section += "## Additional Notes\n\(ds.notes)\n\n"
+        }
+
+        return section
+    }
+
+    /// Renders the icon-library guidance as a prompt section. Returns `nil`
+    /// when no library is set (or `.none` is selected) so the prompt stays
+    /// silent — telling the model nothing is the right behaviour for users who
+    /// want emoji / no icons / the model's default judgement.
+    ///
+    /// The section is intentionally narrow: markup + import + a "do not mix
+    /// libraries" rule. Per-library details live on `IconLibrary.promptGuidance`
+    /// so adding a new library only touches the enum.
+    static func buildIconLibrarySection(_ library: IconLibrary?) -> String? {
+        guard let library, !library.isNone else { return nil }
+
+        var section = """
+        # Icon Library
+        Use **\(library.displayName)** for any icons that appear in the UI. \
+        Do not mix icon libraries — pick the matching glyph from \(library.displayName) \
+        for everything (nav, buttons, inputs, alerts, empty states, etc.).
+
+        \(library.promptGuidance)
+
+        - Match icon size to the surrounding type and component scale (Tailwind \
+        `size-4` for inline text, `size-5` for buttons/inputs, `size-6` for nav).
+        - Use `currentColor` (or theme tokens via `text-[hsl(var(--foreground))]`) so \
+        icons follow the light/dark theme, not hard-coded colors.
+        - For input adornments (e.g. a search affordance), absolutely position the icon \
+        inside a relative-positioned wrapper so it does not break the input layout.
+
+        """
+
+        if let importHint = library.reactImportHint {
+            section += "Example reactCode import for \(library.displayName): `\(importHint)`.\n"
         }
 
         return section

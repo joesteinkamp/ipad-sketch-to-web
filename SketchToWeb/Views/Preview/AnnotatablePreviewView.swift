@@ -388,8 +388,9 @@ private struct SnapshotableWebPreviewView: UIViewRepresentable {
     private var appearanceRaw: String = ShadcnThemeStorage.defaultAppearance.rawValue
 
     @Environment(\.colorScheme) private var systemColorScheme
+    @EnvironmentObject private var appState: AppState
 
-    private var themedHTML: String {
+    private var processedHTML: String {
         let base = ShadcnBaseColor(rawValue: baseColorRaw) ?? ShadcnThemeStorage.defaultBaseColor
         let appearance = ThemeAppearance(rawValue: appearanceRaw) ?? ShadcnThemeStorage.defaultAppearance
         let theme = ShadcnTheme.resolve(
@@ -397,7 +398,9 @@ private struct SnapshotableWebPreviewView: UIViewRepresentable {
             appearance: appearance,
             systemPrefersDark: systemColorScheme == .dark
         )
-        return HTMLTemplateEngine.injectTheme(into: htmlContent, theme: theme)
+        let themed = HTMLTemplateEngine.injectTheme(into: htmlContent, theme: theme)
+        let library = appState.designSystemSnapshot?.iconLibrary ?? .none
+        return HTMLTemplateEngine.injectIconLibrary(into: themed, library: library)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -424,7 +427,7 @@ private struct SnapshotableWebPreviewView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        let rendered = themedHTML
+        let rendered = processedHTML
         guard context.coordinator.lastLoadedContent != rendered else { return }
         context.coordinator.lastLoadedContent = rendered
         webView.loadHTMLString(rendered, baseURL: nil)

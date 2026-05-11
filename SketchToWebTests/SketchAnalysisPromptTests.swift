@@ -422,4 +422,89 @@ final class SketchAnalysisPromptTests: XCTestCase {
         let prompt = SketchAnalysisPrompt.buildUserPrompt(labeledBoxes: [box])
         XCTAssertTrue(prompt.contains("Box at (x:11, y:20, w:100, h:33): Badge"))
     }
+
+    // MARK: - Icon Library Section
+
+    func testBuildIconLibrarySectionReturnsNilForNone() {
+        XCTAssertNil(SketchAnalysisPrompt.buildIconLibrarySection(nil))
+        XCTAssertNil(SketchAnalysisPrompt.buildIconLibrarySection(.none))
+    }
+
+    func testBuildIconLibrarySectionForLucideMentionsMarkupAndImport() {
+        let section = SketchAnalysisPrompt.buildIconLibrarySection(.lucide)
+        XCTAssertNotNil(section)
+        XCTAssertTrue(section?.contains("# Icon Library") ?? false)
+        XCTAssertTrue(section?.contains("Lucide") ?? false)
+        XCTAssertTrue(section?.contains("data-lucide") ?? false)
+        XCTAssertTrue(section?.contains("lucide-react") ?? false)
+    }
+
+    func testBuildIconLibrarySectionForHeroiconsTellsModelToInline() {
+        let section = SketchAnalysisPrompt.buildIconLibrarySection(.heroicons)
+        XCTAssertNotNil(section)
+        XCTAssertTrue(section?.contains("Heroicons") ?? false)
+        XCTAssertTrue(section?.contains("currentColor") ?? false)
+        XCTAssertTrue(section?.contains("@heroicons/react") ?? false)
+    }
+
+    func testBuildSystemPromptIncludesIconLibrarySectionWhenLibraryIsSet() {
+        let snapshot = DesignSystemSnapshot(
+            companyBlurb: "",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: nil,
+            sourceURLContent: nil,
+            zipExtractedContent: nil,
+            zipFilename: nil,
+            iconLibrary: .phosphor,
+            fontFileNames: [],
+            assetFileNames: [],
+            synthesizedMarkdown: nil,
+            synthesizedAt: nil
+        )
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: snapshot
+        )
+
+        XCTAssertTrue(prompt.contains("# Icon Library"))
+        XCTAssertTrue(prompt.contains("Phosphor Icons"))
+        XCTAssertTrue(prompt.contains("@phosphor-icons/react"))
+        // Icon section should come before the layout rules, just like the
+        // design-system section.
+        guard
+            let iconIdx = prompt.range(of: "# Icon Library")?.lowerBound,
+            let layoutIdx = prompt.range(of: "# Layout Interpretation Rules")?.lowerBound
+        else {
+            XCTFail("Expected both sections in prompt")
+            return
+        }
+        XCTAssertLessThan(iconIdx, layoutIdx)
+    }
+
+    func testBuildSystemPromptOmitsIconLibrarySectionWhenLibraryIsNone() {
+        let snapshot = DesignSystemSnapshot(
+            companyBlurb: "Acme",
+            notes: "",
+            markdownContent: nil,
+            markdownFilename: nil,
+            sourceURL: nil,
+            sourceURLContent: nil,
+            zipExtractedContent: nil,
+            zipFilename: nil,
+            iconLibrary: .none,
+            fontFileNames: [],
+            assetFileNames: [],
+            synthesizedMarkdown: nil,
+            synthesizedAt: nil
+        )
+        let prompt = SketchAnalysisPrompt.buildSystemPrompt(
+            components: sampleComponents,
+            designSystem: snapshot
+        )
+        XCTAssertFalse(prompt.contains("# Icon Library"))
+        // Design system section should still appear since the blurb is set.
+        XCTAssertTrue(prompt.contains("# Design System Context"))
+    }
 }

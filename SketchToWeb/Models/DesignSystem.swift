@@ -61,6 +61,12 @@ final class DesignSystem {
     /// `DesignSystemImporter.fetchPreset(slug:)` and cached on disk.
     var presetContent: String?
 
+    /// Raw value of the user-selected web icon library (e.g. "lucide").
+    /// Stored as a string so the SwiftData schema doesn't need migrating when
+    /// new cases are added to `IconLibrary`. `nil` means "no preference" and
+    /// resolves to `IconLibrary.none` via the `iconLibrary` accessor below.
+    var iconLibraryRaw: String?
+
     /// Distilled DESIGN.md produced by `DesignSystemSynthesizer`. When non-nil
     /// and non-empty, this replaces the raw `sourceURLContent` and
     /// `zipExtractedContent` blocks in the conversion prompt.
@@ -85,8 +91,17 @@ final class DesignSystem {
         self.notes = notes
     }
 
+    /// Typed accessor over `iconLibraryRaw`. Unknown raw values fall back to
+    /// `.none` rather than crashing — the stored string is treated as a hint.
+    var iconLibrary: IconLibrary {
+        get { iconLibraryRaw.flatMap(IconLibrary.init(rawValue:)) ?? .none }
+        set { iconLibraryRaw = newValue.isNone ? nil : newValue.rawValue }
+    }
+
     /// True when no source content has been provided. The prompt-building code
-    /// uses this to skip the design-system section entirely.
+    /// uses this to skip the design-system section entirely. An icon library
+    /// choice on its own does not count as "content" — the prompt builder
+    /// surfaces icon guidance independently of the design-system section.
     var isEmpty: Bool {
         companyBlurb.isEmpty &&
         notes.isEmpty &&
@@ -117,7 +132,8 @@ final class DesignSystem {
             presetContent: presetContent,
             notes: notes,
             fontFilePaths: fontFilePaths,
-            assetFilePaths: assetFilePaths
+            assetFilePaths: assetFilePaths,
+            iconLibrary: iconLibrary
         )
     }
 
@@ -165,6 +181,7 @@ final class DesignSystem {
             presetSlug: presetSlug,
             presetName: presetName,
             presetContent: presetContent,
+            iconLibrary: iconLibrary,
             fontFileNames: fontFilePaths.map { ($0 as NSString).lastPathComponent },
             assetFileNames: assetFilePaths.map { ($0 as NSString).lastPathComponent },
             synthesizedMarkdown: synthesizedMarkdown,
@@ -188,11 +205,17 @@ struct DesignSystemSnapshot: Sendable, Equatable {
     var presetSlug: String? = nil
     var presetName: String? = nil
     var presetContent: String? = nil
+    var iconLibrary: IconLibrary = .none
     var fontFileNames: [String]
     var assetFileNames: [String]
     var synthesizedMarkdown: String?
     var synthesizedAt: Date?
 
+    /// True when there is no design-system text content. An icon library
+    /// choice alone does **not** count: the icon section is emitted by the
+    /// prompt builder independently of the `# Design System Context` block, so
+    /// `isEmpty` continues to mean "the text block would be empty" — exactly
+    /// what `SketchAnalysisPrompt.buildDesignSystemSection(_:)` needs.
     var isEmpty: Bool {
         companyBlurb.isEmpty &&
         notes.isEmpty &&
@@ -203,11 +226,18 @@ struct DesignSystemSnapshot: Sendable, Equatable {
         fontFileNames.isEmpty &&
         assetFileNames.isEmpty
     }
+
+    /// True when the snapshot carries *anything* useful — either design-system
+    /// text content or an explicit icon library choice. Callers gating whether
+    /// to thread the snapshot into pipelines should use this instead of
+    /// `isEmpty`, otherwise an icon-only choice silently disappears.
+    var hasAnyContent: Bool { !isEmpty || !iconLibrary.isNone }
 }
 
 extension DesignSystemSnapshot {
     /// Backwards-compatible initializer for tests and call sites that
-    /// predate the synthesis fields.
+    /// predate the synthesis fields. New fields (`iconLibrary`) default to
+    /// their "neutral" values so existing tests keep their original meaning.
     init(
         companyBlurb: String,
         notes: String,
@@ -229,6 +259,7 @@ extension DesignSystemSnapshot {
             sourceURLContent: sourceURLContent,
             zipExtractedContent: zipExtractedContent,
             zipFilename: zipFilename,
+            iconLibrary: .none,
             fontFileNames: fontFileNames,
             assetFileNames: assetFileNames,
             synthesizedMarkdown: nil,
@@ -252,7 +283,8 @@ enum DesignSystemFingerprint {
         presetContent: String?,
         notes: String,
         fontFilePaths: [String],
-        assetFilePaths: [String]
+        assetFilePaths: [String],
+        iconLibrary: IconLibrary = .none
     ) -> String {
         let parts: [String] = [
             companyBlurb,
@@ -271,7 +303,8 @@ enum DesignSystemFingerprint {
             assetFilePaths
                 .map { ($0 as NSString).lastPathComponent }
                 .sorted()
-                .joined(separator: ",")
+                .joined(separator: ","),
+            iconLibrary.rawValue
         ]
         let joined = parts.joined(separator: "\n--FIELD--\n")
         let digest = SHA256.hash(data: Data(joined.utf8))

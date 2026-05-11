@@ -34,6 +34,18 @@ final class Project {
     var customCompanyBlurb: String = ""
     var customNotes: String = ""
 
+    /// Project-scoped web icon library override. Stored as raw string for the
+    /// same schema-stability reason as `DesignSystem.iconLibraryRaw`. Only
+    /// consulted when `usesCustomDesignSystem` is true.
+    var customIconLibraryRaw: String?
+
+    /// Typed accessor over `customIconLibraryRaw`. Unknown raw values fall
+    /// back to `.none`.
+    var customIconLibrary: IconLibrary {
+        get { customIconLibraryRaw.flatMap(IconLibrary.init(rawValue:)) ?? .none }
+        set { customIconLibraryRaw = newValue.isNone ? nil : newValue.rawValue }
+    }
+
     @Relationship(deleteRule: .cascade, inverse: \Generation.project)
     var generations: [Generation] = []
 

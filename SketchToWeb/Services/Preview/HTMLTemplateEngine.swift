@@ -9,6 +9,17 @@ enum HTMLTemplateEngine {
     /// rather than accumulate.
     static let themeStyleID = "sketch-theme-tokens"
 
+    /// Wrapper element `id` used to bracket runtime-injected icon-library tags
+    /// (script and/or stylesheet). Matched by the idempotency check in
+    /// `injectIconLibrary(into:library:)` so repeated calls replace rather than
+    /// accumulate, and switching libraries doesn't leave stale tags behind.
+    static let iconLibraryContainerID = "sketch-icon-library"
+
+    /// Companion `<script>` `id` for the body-end init script (e.g. Lucide's
+    /// `lucide.createIcons()`). Lives outside the head wrapper because it must
+    /// run after the body.
+    static let iconLibraryInitScriptID = "sketch-icon-library-init"
+
     // MARK: - Public API
 
     /// Returns a complete HTML document that loads Tailwind CSS from the CDN
@@ -20,7 +31,8 @@ enum HTMLTemplateEngine {
     ///     historical hardcoded values.
     static func buildPreviewHTML(
         body: String,
-        theme: ShadcnTheme = ShadcnTheme(base: .slate, isDark: false)
+        theme: ShadcnTheme = ShadcnTheme(base: .slate, isDark: false),
+        iconLibrary: IconLibrary = .none
     ) -> String {
         """
         <!DOCTYPE html>
@@ -29,6 +41,7 @@ enum HTMLTemplateEngine {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <script src="https://cdn.tailwindcss.com"></script>
+        \(iconLibraryHeadBlock(for: iconLibrary))
         <style id="\(themeStyleID)">
         \(themeCSS(for: theme))
         </style>
@@ -40,6 +53,7 @@ enum HTMLTemplateEngine {
         <body>
         \(body)
         \(interactiveScript)
+        \(iconLibraryInitBlock(for: iconLibrary))
         </body>
         </html>
         """
@@ -55,8 +69,13 @@ enum HTMLTemplateEngine {
     static func buildOfflineHTML(
         body: String,
         bundledCSS: String,
-        theme: ShadcnTheme = ShadcnTheme(base: .slate, isDark: false)
+        theme: ShadcnTheme = ShadcnTheme(base: .slate, isDark: false),
+        iconLibrary: IconLibrary = .none
     ) -> String {
+        // TODO: For true offline output we should inline icon-library assets
+        // (Material Symbols font, Lucide/Phosphor JS) rather than reference
+        // their CDNs. For now we still inject the CDN tags so exported HTML
+        // matches the in-app preview when a network is available.
         """
         <!DOCTYPE html>
         <html lang="en"\(theme.isDark ? " class=\"dark\"" : "")>
@@ -66,6 +85,7 @@ enum HTMLTemplateEngine {
         <style>
         \(bundledCSS)
         </style>
+        \(iconLibraryHeadBlock(for: iconLibrary))
         <style id="\(themeStyleID)">
         \(themeCSS(for: theme))
         </style>
@@ -77,6 +97,7 @@ enum HTMLTemplateEngine {
         <body>
         \(body)
         \(interactiveScript)
+        \(iconLibraryInitBlock(for: iconLibrary))
         </body>
         </html>
         """
@@ -112,6 +133,67 @@ enum HTMLTemplateEngine {
         }
 
         return setDarkClassOnHTMLTag(in: working, isDark: theme.isDark)
+    }
+
+    /// Splices the chosen icon library's CDN tags (and matching body-end init
+    /// script) into model-generated HTML. Works the same way as `injectTheme`:
+    /// a wrapper `<div id="sketch-icon-library">` block is inserted into
+    /// `<head>` and a `<script id="sketch-icon-library-init">` is inserted
+    /// just before `</body>`. Both are matched on the next call so switching
+    /// libraries (or re-rendering the same one) replaces rather than stacks.
+    ///
+    /// Passing `.none` strips any previously-injected blocks but inserts none.
+    /// Heroicons and Carbon are also `.none`-equivalent here because their
+    /// icons are emitted as inline SVG by the model — no runtime needed.
+    static func injectIconLibrary(into html: String, library: IconLibrary) -> String {
+        let cleared = removeInjectedIconLibrary(from: html)
+        guard library.integrationKind != .none && library.integrationKind != .inlineSVG else {
+            return cleared
+        }
+        return appendIconLibraryBlocks(to: cleared, library: library)
+    }
+
+    private static func removeInjectedIconLibrary(from html: String) -> String {
+        var working = html
+        let headPattern = #"<div id="\#(iconLibraryContainerID)"[\s\S]*?</div>\s*"#
+        if let range = working.range(of: headPattern, options: .regularExpression) {
+            working.replaceSubrange(range, with: "")
+        }
+        let scriptPattern = #"<script id="\#(iconLibraryInitScriptID)"[\s\S]*?</script>\s*"#
+        if let range = working.range(of: scriptPattern, options: .regularExpression) {
+            working.replaceSubrange(range, with: "")
+        }
+        return working
+    }
+
+    private static func appendIconLibraryBlocks(to html: String, library: IconLibrary) -> String {
+        let headBlock = """
+        <div id="\(iconLibraryContainerID)" style="display:none">\(library.headTags)</div>
+        """
+
+        var working = html
+        if let headEnd = working.range(of: "</head>", options: .caseInsensitive) {
+            working.insert(contentsOf: headBlock + "\n", at: headEnd.lowerBound)
+        } else if let bodyStart = working.range(of: "<body", options: .caseInsensitive) {
+            let synthesized = "<head>\n\(headBlock)\n</head>\n"
+            working.insert(contentsOf: synthesized, at: bodyStart.lowerBound)
+        } else {
+            working = headBlock + "\n" + working
+        }
+
+        if let raw = library.initScript {
+            let initBlock = raw.replacingOccurrences(
+                of: "<script>",
+                with: #"<script id="\#(iconLibraryInitScriptID)">"#
+            )
+            if let bodyEnd = working.range(of: "</body>", options: .caseInsensitive) {
+                working.insert(contentsOf: initBlock + "\n", at: bodyEnd.lowerBound)
+            } else {
+                working += "\n" + initBlock
+            }
+        }
+
+        return working
     }
 
     /// Adds or removes a `dark` class on the `<html>` opening tag. Preserves
@@ -154,6 +236,25 @@ enum HTMLTemplateEngine {
     }
 
     // MARK: - Private Fragments
+
+    /// Wraps an icon library's `headTags` in the same idempotency wrapper
+    /// `injectIconLibrary(into:library:)` produces, so HTML built via
+    /// `buildPreviewHTML` and HTML refined through `injectIconLibrary` end up
+    /// matching the same regex on the *next* re-injection.
+    private static func iconLibraryHeadBlock(for library: IconLibrary) -> String {
+        let tags = library.headTags
+        guard !tags.isEmpty else { return "" }
+        return #"<div id="\#(iconLibraryContainerID)" style="display:none">\#(tags)</div>"#
+    }
+
+    /// Same idea for the body-end init script (Lucide's `createIcons()` call).
+    private static func iconLibraryInitBlock(for library: IconLibrary) -> String {
+        guard let raw = library.initScript else { return "" }
+        return raw.replacingOccurrences(
+            of: "<script>",
+            with: #"<script id="\#(iconLibraryInitScriptID)">"#
+        )
+    }
 
     /// Renders the `:root` body for a given shadcn theme. The leading indent
     /// keeps the output readable when embedded in a larger `<style>` block.
