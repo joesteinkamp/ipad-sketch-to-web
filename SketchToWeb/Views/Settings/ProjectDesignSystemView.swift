@@ -49,6 +49,21 @@ struct ProjectDesignSystemView: View {
             } message: {
                 Text(importError ?? "")
             }
+            .sheet(isPresented: $showPresetGallery) {
+                DesignPresetGalleryView(
+                    activeSlug: project.customPresetSlug,
+                    onSelect: { preset, body in
+                        project.customPresetSlug = preset.slug
+                        project.customPresetName = preset.name
+                        project.customPresetContent = body
+                    },
+                    onClear: {
+                        project.customPresetSlug = nil
+                        project.customPresetName = nil
+                        project.customPresetContent = nil
+                    }
+                )
+            }
         }
     }
 
@@ -104,21 +119,6 @@ struct ProjectDesignSystemView: View {
             Text("Curated preset")
         } footer: {
             Text("Pick a DESIGN.md from the getdesign.md collection.")
-        }
-        .sheet(isPresented: $showPresetGallery) {
-            DesignPresetGalleryView(
-                activeSlug: project.customPresetSlug,
-                onSelect: { preset, body in
-                    project.customPresetSlug = preset.slug
-                    project.customPresetName = preset.name
-                    project.customPresetContent = body
-                },
-                onClear: {
-                    project.customPresetSlug = nil
-                    project.customPresetName = nil
-                    project.customPresetContent = nil
-                }
-            )
         }
     }
 
