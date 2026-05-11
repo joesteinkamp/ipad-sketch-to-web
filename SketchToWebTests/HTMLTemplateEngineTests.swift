@@ -419,6 +419,86 @@ final class HTMLTemplateEngineTests: XCTestCase {
         XCTAssertFalse(stripped.contains(HTMLTemplateEngine.iconLibraryInitScriptID))
     }
 
+    // MARK: - Body Force-Override
+
+    /// The whole point of the toggle is that the page background flips when the
+    /// user picks Dark or a different base color. Gemini routinely emits
+    /// `<body class="bg-white …">`, whose `.bg-white` (specificity 0,0,1,0)
+    /// beats any non-important `body { background: … }` (0,0,0,1) we inject.
+    /// The injected theme block must therefore force body bg/fg via
+    /// `!important` so the toggle is visibly responsive.
+    func testInjectThemeForcesBodyBackgroundAndForeground() {
+        let themed = HTMLTemplateEngine.injectTheme(
+            into: modelHTML,
+            theme: ShadcnTheme(base: .slate, isDark: true)
+        )
+
+        XCTAssertTrue(
+            themed.contains("background-color: hsl(var(--background)) !important"),
+            "Body background must be forced via !important so model classes like bg-white don't override the theme."
+        )
+        XCTAssertTrue(
+            themed.contains("color: hsl(var(--foreground)) !important"),
+            "Body foreground must be forced via !important for the same reason."
+        )
+    }
+
+    // MARK: - Tailwind Config Injection
+
+    func testInjectThemeAddsTailwindConfigScript() {
+        let themed = HTMLTemplateEngine.injectTheme(
+            into: modelHTML,
+            theme: ShadcnTheme(base: .slate, isDark: false)
+        )
+        XCTAssertTrue(
+            themed.contains("<script id=\"\(HTMLTemplateEngine.tailwindConfigScriptID)\">"),
+            "Tailwind config script must be injected so darkMode and named colors apply."
+        )
+    }
+
+    func testTailwindConfigEnablesClassDarkMode() {
+        let themed = HTMLTemplateEngine.injectTheme(
+            into: modelHTML,
+            theme: ShadcnTheme(base: .slate, isDark: false)
+        )
+        // The CDN defaults to `darkMode: 'media'`; we need `'class'` so the
+        // `dark` class we toggle on <html> actually drives `dark:` variants.
+        XCTAssertTrue(
+            themed.contains("darkMode: 'class'"),
+            "Tailwind config must set darkMode to 'class' so the dark class on <html> drives dark: variants."
+        )
+    }
+
+    func testTailwindConfigRegistersShadcnSemanticColors() {
+        let themed = HTMLTemplateEngine.injectTheme(
+            into: modelHTML,
+            theme: ShadcnTheme(base: .slate, isDark: false)
+        )
+        // A representative sampling — exhaustive coverage would just duplicate
+        // the source. We care that the named-color extend block reaches the page.
+        XCTAssertTrue(themed.contains("background: 'hsl(var(--background))'"))
+        XCTAssertTrue(themed.contains("DEFAULT: 'hsl(var(--primary))'"))
+        XCTAssertTrue(themed.contains("DEFAULT: 'hsl(var(--card))'"))
+        XCTAssertTrue(themed.contains("foreground: 'hsl(var(--card-foreground))'"))
+    }
+
+    func testInjectThemeIsIdempotentForConfigScript() {
+        let onceThemed = HTMLTemplateEngine.injectTheme(
+            into: modelHTML,
+            theme: ShadcnTheme(base: .stone, isDark: true)
+        )
+        let twiceThemed = HTMLTemplateEngine.injectTheme(
+            into: onceThemed,
+            theme: ShadcnTheme(base: .stone, isDark: true)
+        )
+
+        // Exactly one config script after repeated injection.
+        let occurrences = twiceThemed.components(
+            separatedBy: "<script id=\"\(HTMLTemplateEngine.tailwindConfigScriptID)\">"
+        ).count - 1
+        XCTAssertEqual(occurrences, 1, "Repeated injectTheme must not stack config scripts.")
+    }
+
     func testInjectIconLibraryAndThemeDoNotInterfere() {
         // The two injectors target different IDs and different parts of <head>.
         // Running them in either order should leave both blocks intact.
