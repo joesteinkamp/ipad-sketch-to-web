@@ -72,14 +72,12 @@ Pre-condition: a generation exists in the preview.
 
 | # | Steps | Expected | Pass |
 |---|---|---|---|
-| 5.1 | Tap "Annotate" entry button | Toolbar appears: Draw / Comment / Refine / Overflow / X | ☐ |
-| 5.2 | Draw mode → freehand strokes | Red strokes overlay the web preview | ☐ |
-| 5.3 | Comment mode → tap on preview | Numbered pin appears; inline text field opens | ☐ |
-| 5.4 | Type comment → switch to Draw mode | Pin and text persist | ☐ |
-| 5.5 | Add 3 pins → switch to Draw → switch back | All 3 pins still visible with their numbers in order | ☐ |
-| 5.6 | Tap Refine | Composite screenshot sent (web + strokes + pins); new generation appended to history | ☐ |
-| 5.7 | Overflow → Clear all | Strokes and pins removed | ☐ |
-| 5.8 | Tap X | Toolbar collapses to Annotate entry button | ☐ |
+| 5.1 | Tap "Annotate" entry button | Toolbar appears: Refine / Overflow / X (comment mode active) | ☐ |
+| 5.2 | Tap on preview | Numbered pin appears; inline text field opens | ☐ |
+| 5.3 | Add 3 pins | All 3 pins visible with their numbers in order | ☐ |
+| 5.4 | Tap Refine | Composite screenshot sent (web + pins); new generation appended to history | ☐ |
+| 5.5 | Overflow → Clear all | Pins removed | ☐ |
+| 5.6 | Tap X | Toolbar collapses to Annotate entry button | ☐ |
 
 ## 6. Generation History
 
