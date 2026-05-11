@@ -26,6 +26,7 @@ struct ProjectDesignSystemView: View {
                 if project.usesCustomDesignSystem {
                     blurbSection
                     presetSection
+                    iconLibrarySection
                     markdownSection
                     notesSection
                 }
@@ -118,6 +119,35 @@ struct ProjectDesignSystemView: View {
                     project.customPresetContent = nil
                 }
             )
+        }
+    }
+
+    @ViewBuilder
+    private var iconLibrarySection: some View {
+        let binding = Binding(
+            get: { project.customIconLibrary },
+            set: { project.customIconLibrary = $0 }
+        )
+
+        Section {
+            Picker("Icon library", selection: binding) {
+                ForEach(IconLibrary.allCases) { library in
+                    Label(library.displayName, systemImage: library.pickerSymbol)
+                        .tag(library)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+
+            if !project.customIconLibrary.isNone {
+                Text(project.customIconLibrary.blurb)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text("Icons in generated code")
+        } footer: {
+            Text("Overrides the global icon library for this project. Switching only affects future generations.")
         }
     }
 

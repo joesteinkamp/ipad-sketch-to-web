@@ -48,6 +48,7 @@ private struct DesignSystemEditorView: View {
                 headerSection
                 blurbSection
                 resourcesSection
+                iconLibrarySection
                 synthesisSection
                 notesSection
             }
@@ -128,6 +129,38 @@ private struct DesignSystemEditorView: View {
             Text("Examples of your design system (all optional)")
         } footer: {
             Text("What works best: code and designs for your design system and your code products.")
+        }
+    }
+
+    @ViewBuilder
+    private var iconLibrarySection: some View {
+        let binding = Binding(
+            get: { designSystem.iconLibrary },
+            set: {
+                designSystem.iconLibrary = $0
+                designSystem.updatedAt = Date()
+            }
+        )
+
+        Section {
+            Picker("Icon library", selection: binding) {
+                ForEach(IconLibrary.allCases) { library in
+                    Label(library.displayName, systemImage: library.pickerSymbol)
+                        .tag(library)
+                }
+            }
+            .pickerStyle(.inline)
+            .labelsHidden()
+
+            if !designSystem.iconLibrary.isNone {
+                Text(designSystem.iconLibrary.blurb)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Label("Icons in generated code", systemImage: "sparkle")
+        } footer: {
+            Text("Drives the icon family used in generated HTML and React. SF Symbols only work on Apple platforms, so the web preview needs a real web icon set. Switching libraries only affects future generations — existing previews keep their original icons.")
         }
     }
 

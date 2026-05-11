@@ -118,6 +118,9 @@ struct ContentView: View {
         .onChange(of: selectedProject?.customCompanyBlurb) { _, _ in
             updateDesignSystemSnapshot()
         }
+        .onChange(of: selectedProject?.customIconLibraryRaw) { _, _ in
+            updateDesignSystemSnapshot()
+        }
         .onChange(of: showingSettings) { _, isShowing in
             // Settings sheet is the only surface that edits design-system fields,
             // so re-snapshot when it closes to pick up any edits in one shot.
@@ -150,11 +153,11 @@ struct ContentView: View {
     private func updateDesignSystemSnapshot() {
         if let project = selectedProject, project.usesCustomDesignSystem {
             let snapshot = makeProjectSnapshot(project)
-            appState.designSystemSnapshot = snapshot.isEmpty ? nil : snapshot
+            appState.designSystemSnapshot = snapshot.hasAnyContent ? snapshot : nil
             return
         }
         let snapshot = designSystems.first?.snapshot()
-        appState.designSystemSnapshot = (snapshot?.isEmpty ?? true) ? nil : snapshot
+        appState.designSystemSnapshot = (snapshot?.hasAnyContent ?? false) ? snapshot : nil
     }
 
     /// Builds a `DesignSystemSnapshot` from a project's per-project override
@@ -173,6 +176,7 @@ struct ContentView: View {
             presetSlug: project.customPresetSlug,
             presetName: project.customPresetName,
             presetContent: project.customPresetContent,
+            iconLibrary: project.customIconLibrary,
             fontFileNames: [],
             assetFileNames: []
         )

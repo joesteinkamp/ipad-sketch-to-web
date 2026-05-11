@@ -138,6 +138,10 @@ final class RefinementPipeline: Sendable {
         - The refined code should be a complete replacement, not a diff or partial update.
         """
 
+        if let iconSection = SketchAnalysisPrompt.buildIconLibrarySection(designSystem?.iconLibrary) {
+            prompt += "\n\n" + iconSection
+        }
+
         if let section = SketchAnalysisPrompt.buildDesignSystemSection(designSystem) {
             prompt += "\n\n" + section
         }

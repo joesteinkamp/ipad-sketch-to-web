@@ -335,4 +335,110 @@ final class HTMLTemplateEngineTests: XCTestCase {
         XCTAssertTrue(html.contains("</body>"))
         XCTAssertTrue(html.contains("</html>"))
     }
+
+    // MARK: - Icon Library Injection
+
+    func testBuildPreviewHTMLDefaultsToNoIconLibrary() {
+        let html = HTMLTemplateEngine.buildPreviewHTML(body: "<p>x</p>")
+        XCTAssertFalse(html.contains(HTMLTemplateEngine.iconLibraryContainerID))
+        XCTAssertFalse(html.contains(HTMLTemplateEngine.iconLibraryInitScriptID))
+    }
+
+    func testBuildPreviewHTMLWithLucideEmbedsScriptAndInitCall() {
+        let html = HTMLTemplateEngine.buildPreviewHTML(body: "<p>x</p>", iconLibrary: .lucide)
+        XCTAssertTrue(html.contains("unpkg.com/lucide"))
+        XCTAssertTrue(html.contains("lucide.createIcons"))
+        XCTAssertTrue(html.contains(HTMLTemplateEngine.iconLibraryInitScriptID))
+    }
+
+    func testBuildPreviewHTMLWithMaterialSymbolsEmbedsStylesheet() {
+        let html = HTMLTemplateEngine.buildPreviewHTML(body: "<p>x</p>", iconLibrary: .materialSymbols)
+        XCTAssertTrue(html.contains("fonts.googleapis.com"))
+        XCTAssertTrue(html.contains("Material+Symbols"))
+    }
+
+    func testBuildPreviewHTMLWithHeroiconsAddsNoCDNTags() {
+        // Heroicons is inlined as SVG by the model — no CDN tag should be added.
+        let html = HTMLTemplateEngine.buildPreviewHTML(body: "<p>x</p>", iconLibrary: .heroicons)
+        XCTAssertFalse(html.contains("unpkg.com"))
+        XCTAssertFalse(html.contains("fonts.googleapis.com"))
+        XCTAssertFalse(html.contains(HTMLTemplateEngine.iconLibraryInitScriptID))
+    }
+
+    func testInjectIconLibraryAddsHeadWrapperAndInitScript() {
+        let injected = HTMLTemplateEngine.injectIconLibrary(into: modelHTML, library: .lucide)
+
+        XCTAssertTrue(
+            injected.contains("<div id=\"\(HTMLTemplateEngine.iconLibraryContainerID)\""),
+            "Should add a uniquely-IDed wrapper element in <head>."
+        )
+        XCTAssertTrue(injected.contains("unpkg.com/lucide"))
+
+        // Wrapper is in <head>, init <script> is just before </body>.
+        let containerIdx = injected.range(of: HTMLTemplateEngine.iconLibraryContainerID)!.lowerBound
+        let headEndIdx = injected.range(of: "</head>")!.lowerBound
+        let bodyEndIdx = injected.range(of: "</body>")!.lowerBound
+        XCTAssertLessThan(containerIdx, headEndIdx)
+
+        let initIdx = injected.range(of: HTMLTemplateEngine.iconLibraryInitScriptID)!.lowerBound
+        XCTAssertLessThan(initIdx, bodyEndIdx)
+        XCTAssertGreaterThan(initIdx, headEndIdx)
+    }
+
+    func testInjectIconLibraryIsIdempotent() {
+        let once = HTMLTemplateEngine.injectIconLibrary(into: modelHTML, library: .phosphor)
+        let twice = HTMLTemplateEngine.injectIconLibrary(into: once, library: .phosphor)
+
+        XCTAssertEqual(once, twice, "Re-injecting the same library must be a no-op.")
+
+        let wrappers = twice.components(separatedBy: "id=\"\(HTMLTemplateEngine.iconLibraryContainerID)\"").count - 1
+        XCTAssertEqual(wrappers, 1, "Only one library wrapper should exist after re-injection.")
+    }
+
+    func testInjectIconLibrarySwitchingLibrariesReplacesPriorBlock() {
+        let lucid = HTMLTemplateEngine.injectIconLibrary(into: modelHTML, library: .lucide)
+        XCTAssertTrue(lucid.contains("unpkg.com/lucide"))
+        XCTAssertTrue(lucid.contains("lucide.createIcons"))
+
+        let phosphor = HTMLTemplateEngine.injectIconLibrary(into: lucid, library: .phosphor)
+        XCTAssertFalse(phosphor.contains("unpkg.com/lucide"), "Lucide script should be replaced.")
+        XCTAssertFalse(phosphor.contains("lucide.createIcons"), "Lucide init should be replaced.")
+        XCTAssertTrue(phosphor.contains("@phosphor-icons/web"))
+
+        let wrappers = phosphor.components(separatedBy: "id=\"\(HTMLTemplateEngine.iconLibraryContainerID)\"").count - 1
+        XCTAssertEqual(wrappers, 1)
+    }
+
+    func testInjectIconLibraryWithNoneStripsAnyPriorInjection() {
+        let withLucide = HTMLTemplateEngine.injectIconLibrary(into: modelHTML, library: .lucide)
+        XCTAssertTrue(withLucide.contains("unpkg.com/lucide"))
+
+        let stripped = HTMLTemplateEngine.injectIconLibrary(into: withLucide, library: .none)
+        XCTAssertFalse(stripped.contains("unpkg.com/lucide"))
+        XCTAssertFalse(stripped.contains(HTMLTemplateEngine.iconLibraryContainerID))
+        XCTAssertFalse(stripped.contains(HTMLTemplateEngine.iconLibraryInitScriptID))
+    }
+
+    func testInjectIconLibraryAndThemeDoNotInterfere() {
+        // The two injectors target different IDs and different parts of <head>.
+        // Running them in either order should leave both blocks intact.
+        let withTheme = HTMLTemplateEngine.injectTheme(
+            into: modelHTML,
+            theme: ShadcnTheme(base: .zinc, isDark: false)
+        )
+        let withBoth = HTMLTemplateEngine.injectIconLibrary(into: withTheme, library: .lucide)
+
+        XCTAssertTrue(withBoth.contains(HTMLTemplateEngine.themeStyleID))
+        XCTAssertTrue(withBoth.contains(HTMLTemplateEngine.iconLibraryContainerID))
+        XCTAssertTrue(withBoth.contains("--primary: 240 5.9% 10%;"))
+        XCTAssertTrue(withBoth.contains("unpkg.com/lucide"))
+
+        // Re-running theme on top of icon-injected HTML shouldn't strip the icon block.
+        let rethemed = HTMLTemplateEngine.injectTheme(
+            into: withBoth,
+            theme: ShadcnTheme(base: .stone, isDark: true)
+        )
+        XCTAssertTrue(rethemed.contains("unpkg.com/lucide"))
+        XCTAssertTrue(rethemed.contains(HTMLTemplateEngine.iconLibraryContainerID))
+    }
 }

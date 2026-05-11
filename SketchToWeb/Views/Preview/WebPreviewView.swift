@@ -17,8 +17,16 @@ struct WebPreviewView: UIViewRepresentable {
     private var appearanceRaw: String = ShadcnThemeStorage.defaultAppearance.rawValue
 
     @Environment(\.colorScheme) private var systemColorScheme
+    @EnvironmentObject private var appState: AppState
 
-    private var themedHTML: String {
+    /// Pipeline:
+    ///   model-generated HTML
+    ///   → `injectTheme` (CSS tokens for shadcn base color + dark class)
+    ///   → `injectIconLibrary` (Lucide/Phosphor/Material Symbols CDN tags)
+    ///
+    /// Order matters only for readability — both injectors are idempotent and
+    /// operate on different `<style>`/`<script>` ids, so they don't collide.
+    private var processedHTML: String {
         let base = ShadcnBaseColor(rawValue: baseColorRaw) ?? ShadcnThemeStorage.defaultBaseColor
         let appearance = ThemeAppearance(rawValue: appearanceRaw) ?? ShadcnThemeStorage.defaultAppearance
         let theme = ShadcnTheme.resolve(
@@ -26,7 +34,9 @@ struct WebPreviewView: UIViewRepresentable {
             appearance: appearance,
             systemPrefersDark: systemColorScheme == .dark
         )
-        return HTMLTemplateEngine.injectTheme(into: htmlContent, theme: theme)
+        let themed = HTMLTemplateEngine.injectTheme(into: htmlContent, theme: theme)
+        let library = appState.designSystemSnapshot?.iconLibrary ?? .none
+        return HTMLTemplateEngine.injectIconLibrary(into: themed, library: library)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -50,7 +60,7 @@ struct WebPreviewView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        let rendered = themedHTML
+        let rendered = processedHTML
         // Only reload when the HTML content (or theme-derived output) has actually changed.
         guard context.coordinator.lastLoadedContent != rendered else { return }
         context.coordinator.lastLoadedContent = rendered
