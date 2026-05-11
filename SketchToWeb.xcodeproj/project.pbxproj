@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AB30BF402F9EE3B20083FF89 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = AB30BF422F9EE3B20083FF89 /* ZIPFoundation */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		AB30BF192F9EE3B20083FF89 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AB30BF402F9EE3B20083FF89 /* ZIPFoundation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = SketchToWeb;
 			packageProductDependencies = (
+				AB30BF422F9EE3B20083FF89 /* ZIPFoundation */,
 			);
 			productName = SketchToWeb;
 			productReference = AB30BF0B2F9EE3B00083FF89 /* SketchToWeb.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = AB30BF022F9EE3B00083FF89;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AB30BF412F9EE3B20083FF89 /* XCRemoteSwiftPackageReference "ZIPFoundation" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AB30BF0C2F9EE3B00083FF89 /* Products */;
 			projectDirPath = "";
@@ -570,6 +579,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AB30BF412F9EE3B20083FF89 /* XCRemoteSwiftPackageReference "ZIPFoundation" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/weichsel/ZIPFoundation.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.19;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AB30BF422F9EE3B20083FF89 /* ZIPFoundation */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AB30BF412F9EE3B20083FF89 /* XCRemoteSwiftPackageReference "ZIPFoundation" */;
+			productName = ZIPFoundation;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AB30BF032F9EE3B00083FF89 /* Project object */;
 }
