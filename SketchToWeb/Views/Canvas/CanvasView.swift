@@ -29,6 +29,11 @@ struct CanvasView: View {
     /// Task that triggers auto-conversion after a drawing pause.
     @State private var autoConvertTask: Task<Void, Never>?
 
+    /// Set while we're translating the drawing to keep it centered after a
+    /// viewport resize, so the resulting `drawing` change doesn't schedule
+    /// an auto-conversion.
+    @State private var isRecenteringDrawing = false
+
     /// User preference: automatically convert after a 3-second drawing pause.
     @AppStorage("autoConvertEnabled") private var autoConvertEnabled: Bool = true
 
@@ -69,14 +74,17 @@ struct CanvasView: View {
                 appState.canvasSize = geometry.size
                 appState.currentDrawing = drawing
             }
-            .onChange(of: geometry.size) { _, newSize in
+            .onChange(of: geometry.size) { oldSize, newSize in
                 appState.canvasSize = newSize
+                recenterDrawing(from: oldSize, to: newSize)
             }
         }
         .onChange(of: drawing) { oldDrawing, newDrawing in
             previousDrawing = oldDrawing
             debouncedSave(newDrawing)
-            scheduleAutoConvert(for: newDrawing)
+            if !isRecenteringDrawing {
+                scheduleAutoConvert(for: newDrawing)
+            }
         }
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -140,6 +148,29 @@ struct CanvasView: View {
         }
         drawing = merged
         saveImmediately()
+    }
+
+    // MARK: - Re-centering
+
+    /// Translates the drawing so its bounding box stays centered when the
+    /// canvas viewport resizes — for example when the user flips between
+    /// Split and Sketch layout modes. PencilKit strokes live in absolute
+    /// canvas coordinates, so without this the drawing remains anchored to
+    /// the top-left and appears to drift to one side as the canvas grows.
+    private func recenterDrawing(from oldSize: CGSize, to newSize: CGSize) {
+        guard oldSize.width > 0, oldSize.height > 0 else { return }
+        guard oldSize != newSize else { return }
+        guard !drawing.strokes.isEmpty else { return }
+
+        let bounds = drawing.bounds
+        let deltaX = newSize.width / 2 - bounds.midX
+        let deltaY = newSize.height / 2 - bounds.midY
+        guard abs(deltaX) > 0.5 || abs(deltaY) > 0.5 else { return }
+
+        isRecenteringDrawing = true
+        drawing = drawing.transformed(using: CGAffineTransform(translationX: deltaX, y: deltaY))
+        saveImmediately()
+        DispatchQueue.main.async { isRecenteringDrawing = false }
     }
 
     // MARK: - Persistence
