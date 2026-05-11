@@ -13,7 +13,11 @@ final class CanvasController: ObservableObject {
 
     func attach(_ canvasView: PKCanvasView) {
         self.canvasView = canvasView
-        updateUndoState()
+        // Defer the @Published update so it doesn't fire during the SwiftUI
+        // view update that triggered `makeUIView`.
+        Task { @MainActor in
+            updateUndoState()
+        }
     }
 
     func undo() {
