@@ -16,7 +16,7 @@ enum KeychainHelper {
     ///   - key: The account identifier.
     ///   - data: The data to store.
     @discardableResult
-    static func save(key: String, data: Data) -> Bool {
+    nonisolated static func save(key: String, data: Data) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
@@ -37,7 +37,7 @@ enum KeychainHelper {
     ///
     /// - Parameter key: The account identifier.
     /// - Returns: The stored `Data`, or `nil` if not found.
-    static func load(key: String) -> Data? {
+    nonisolated static func load(key: String) -> Data? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
@@ -57,7 +57,7 @@ enum KeychainHelper {
     ///
     /// - Parameter key: The account identifier.
     @discardableResult
-    static func delete(key: String) -> Bool {
+    nonisolated static func delete(key: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: serviceName,
@@ -76,7 +76,7 @@ enum KeychainHelper {
     ///
     /// - Parameter apiKey: The API key string.
     @discardableResult
-    static func saveAPIKey(_ apiKey: String) -> Bool {
+    nonisolated static func saveAPIKey(_ apiKey: String) -> Bool {
         guard let data = apiKey.data(using: .utf8) else { return false }
         return save(key: apiKeyAccount, data: data)
     }
@@ -84,14 +84,14 @@ enum KeychainHelper {
     /// Retrieves the stored Gemini API key, if any.
     ///
     /// - Returns: The API key string, or `nil` if not stored.
-    static func loadAPIKey() -> String? {
+    nonisolated static func loadAPIKey() -> String? {
         guard let data = load(key: apiKeyAccount) else { return nil }
         return String(data: data, encoding: .utf8)
     }
 
     /// Removes the stored Gemini API key from the keychain.
     @discardableResult
-    static func deleteAPIKey() -> Bool {
+    nonisolated static func deleteAPIKey() -> Bool {
         delete(key: apiKeyAccount)
     }
 
@@ -99,13 +99,13 @@ enum KeychainHelper {
 
     /// Persists a UTF-8 string under the given keychain key.
     @discardableResult
-    static func saveString(_ value: String, key: String) -> Bool {
+    nonisolated static func saveString(_ value: String, key: String) -> Bool {
         guard let data = value.data(using: .utf8) else { return false }
         return save(key: key, data: data)
     }
 
     /// Loads a UTF-8 string from the keychain for the given key.
-    static func loadString(key: String) -> String? {
+    nonisolated static func loadString(key: String) -> String? {
         guard let data = load(key: key) else { return nil }
         return String(data: data, encoding: .utf8)
     }
@@ -124,7 +124,7 @@ enum KeychainHelper {
 
     /// Saves an OAuth token bundle for the given destination.
     @discardableResult
-    static func saveOAuthTokens(_ bundle: OAuthTokenBundle, for destination: DesignDestination) -> Bool {
+    nonisolated static func saveOAuthTokens(_ bundle: OAuthTokenBundle, for destination: DesignDestination) -> Bool {
         let keys = destination.keychainKeys
         let accessOK = saveString(bundle.accessToken, key: keys.accessToken)
         let refreshOK: Bool
@@ -145,7 +145,7 @@ enum KeychainHelper {
     }
 
     /// Loads the OAuth token bundle for the given destination, if present.
-    static func loadOAuthTokens(for destination: DesignDestination) -> OAuthTokenBundle? {
+    nonisolated static func loadOAuthTokens(for destination: DesignDestination) -> OAuthTokenBundle? {
         let keys = destination.keychainKeys
         guard let access = loadString(key: keys.accessToken) else { return nil }
         let refresh = loadString(key: keys.refreshToken)
@@ -155,7 +155,7 @@ enum KeychainHelper {
 
     /// Removes all OAuth tokens for the given destination.
     @discardableResult
-    static func deleteOAuthTokens(for destination: DesignDestination) -> Bool {
+    nonisolated static func deleteOAuthTokens(for destination: DesignDestination) -> Bool {
         let keys = destination.keychainKeys
         let a = delete(key: keys.accessToken)
         let r = delete(key: keys.refreshToken)

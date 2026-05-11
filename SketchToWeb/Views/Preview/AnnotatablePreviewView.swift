@@ -155,7 +155,7 @@ struct AnnotatablePreviewView: View {
         config.snapshotWidth = NSNumber(value: Double(webView.bounds.width))
 
         let canvasSize = webView.bounds.size
-        let scale = UIScreen.main.scale
+        let scale = webView.traitCollection.displayScale
         let drawingSnapshot = annotationDrawing
         let commentsSnapshot = comments
 

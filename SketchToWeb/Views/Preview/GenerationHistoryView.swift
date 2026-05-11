@@ -84,6 +84,8 @@ private struct GenerationRow: View {
     let generation: Generation
     let isActive: Bool
 
+    @Environment(\.displayScale) private var displayScale
+
     var body: some View {
         HStack(spacing: 12) {
             // Drawing thumbnail
@@ -122,7 +124,7 @@ private struct GenerationRow: View {
         if let drawing = try? PKDrawing(data: generation.decompressedSnapshot) {
             let image = drawing.image(
                 from: drawing.bounds,
-                scale: UIScreen.main.scale
+                scale: displayScale
             )
             Image(uiImage: image)
                 .resizable()
