@@ -94,41 +94,41 @@ struct ContentView: View {
         }
         .onChange(of: selectedProject) { _, newProject in
             appState.currentProject = newProject
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: false)
         }
         .onChange(of: appState.pendingGeneration) { _, generation in
             guard let generation else { return }
             modelContext.insert(generation)
         }
         .onChange(of: designSystems.first?.updatedAt) { _, _ in
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: true)
         }
         .onChange(of: selectedProject?.usesCustomDesignSystem) { _, _ in
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: true)
         }
         .onChange(of: selectedProject?.customPresetSlug) { _, _ in
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: true)
         }
         .onChange(of: selectedProject?.customMarkdownContent) { _, _ in
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: true)
         }
         .onChange(of: selectedProject?.customNotes) { _, _ in
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: true)
         }
         .onChange(of: selectedProject?.customCompanyBlurb) { _, _ in
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: true)
         }
         .onChange(of: selectedProject?.customIconLibraryRaw) { _, _ in
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: true)
         }
         .onChange(of: showingSettings) { _, isShowing in
             // Settings sheet is the only surface that edits design-system fields,
             // so re-snapshot when it closes to pick up any edits in one shot.
-            if !isShowing { updateDesignSystemSnapshot() }
+            if !isShowing { updateDesignSystemSnapshot(regenerateOnChange: true) }
         }
         .onAppear {
             appState.currentProject = selectedProject
-            updateDesignSystemSnapshot()
+            updateDesignSystemSnapshot(regenerateOnChange: false)
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
@@ -150,14 +150,27 @@ struct ContentView: View {
     /// Resolution order: if the active project has `usesCustomDesignSystem` on,
     /// build a snapshot from the project's `custom*` fields and ignore the
     /// global record entirely. Otherwise fall back to the global design system.
-    private func updateDesignSystemSnapshot() {
+    ///
+    /// When `regenerateOnChange` is true and the snapshot actually changes and a
+    /// preview already exists, kick off a new conversion so the visible preview
+    /// reflects the new design system (e.g. after picking a preset DESIGN.md).
+    private func updateDesignSystemSnapshot(regenerateOnChange: Bool) {
+        let newSnapshot: DesignSystemSnapshot?
         if let project = selectedProject, project.usesCustomDesignSystem {
             let snapshot = makeProjectSnapshot(project)
-            appState.designSystemSnapshot = snapshot.hasAnyContent ? snapshot : nil
-            return
+            newSnapshot = snapshot.hasAnyContent ? snapshot : nil
+        } else {
+            let snapshot = designSystems.first?.snapshot()
+            newSnapshot = (snapshot?.hasAnyContent ?? false) ? snapshot : nil
         }
-        let snapshot = designSystems.first?.snapshot()
-        appState.designSystemSnapshot = (snapshot?.hasAnyContent ?? false) ? snapshot : nil
+
+        let didChange = appState.designSystemSnapshot != newSnapshot
+        appState.designSystemSnapshot = newSnapshot
+
+        guard regenerateOnChange, didChange else { return }
+        guard appState.generatedResult != nil else { return }
+        guard !appState.isConverting, !appState.isRefining else { return }
+        appState.convertDrawing()
     }
 
     /// Builds a `DesignSystemSnapshot` from a project's per-project override
