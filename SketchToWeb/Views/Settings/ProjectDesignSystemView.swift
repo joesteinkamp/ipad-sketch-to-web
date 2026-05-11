@@ -155,9 +155,9 @@ struct ProjectDesignSystemView: View {
     private var markdownSection: some View {
         Section {
             HStack {
-                Label("Upload DESIGN.md", systemImage: "doc.text")
+                Label("Paste or upload DESIGN.md", systemImage: "doc.text")
                 Spacer()
-                Button(project.customMarkdownContent == nil ? "Choose…" : "Replace") {
+                Button(project.customMarkdownFilename == nil ? "Upload…" : "Replace") {
                     showMarkdownPicker = true
                 }
                 .buttonStyle(.bordered)
@@ -165,12 +165,14 @@ struct ProjectDesignSystemView: View {
             }
             if let name = project.customMarkdownFilename {
                 attachedRow(name: name) {
-                    project.customMarkdownContent = nil
                     project.customMarkdownFilename = nil
                 }
             }
+            markdownEditor
         } header: {
             Text("Custom DESIGN.md")
+        } footer: {
+            Text("Paste markdown directly, or upload a file.")
         }
         .fileImporter(
             isPresented: $showMarkdownPicker,
@@ -178,6 +180,41 @@ struct ProjectDesignSystemView: View {
             allowsMultipleSelection: false
         ) { result in
             handleMarkdownPick(result)
+        }
+    }
+
+    @ViewBuilder
+    private var markdownEditor: some View {
+        let binding = Binding(
+            get: { project.customMarkdownContent ?? "" },
+            set: { newValue in
+                project.customMarkdownContent = newValue.isEmpty ? nil : newValue
+                if newValue.isEmpty {
+                    project.customMarkdownFilename = nil
+                }
+            }
+        )
+
+        ZStack(alignment: .topLeading) {
+            TextEditor(text: binding)
+                .font(.callout.monospaced())
+                .frame(minHeight: 120)
+                .scrollContentBackground(.hidden)
+                .padding(4)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
+                )
+
+            if (project.customMarkdownContent ?? "").isEmpty {
+                Text("# Project DESIGN.md\n\nOverrides for this project only…")
+                    .font(.callout.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 12)
+                    .allowsHitTesting(false)
+            }
         }
     }
 
