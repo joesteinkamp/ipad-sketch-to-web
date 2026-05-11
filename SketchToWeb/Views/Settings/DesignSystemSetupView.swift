@@ -76,6 +76,23 @@ private struct DesignSystemEditorView: View {
             } message: {
                 Text(importError ?? "")
             }
+            .sheet(isPresented: $showPresetGallery) {
+                DesignPresetGalleryView(
+                    activeSlug: designSystem.presetSlug,
+                    onSelect: { preset, body in
+                        designSystem.presetSlug = preset.slug
+                        designSystem.presetName = preset.name
+                        designSystem.presetContent = body
+                        designSystem.updatedAt = Date()
+                    },
+                    onClear: {
+                        designSystem.presetSlug = nil
+                        designSystem.presetName = nil
+                        designSystem.presetContent = nil
+                        designSystem.updatedAt = Date()
+                    }
+                )
+            }
         }
     }
 
@@ -228,23 +245,6 @@ private struct DesignSystemEditorView: View {
             Text("Curated DESIGN.md files inspired by Apple, Stripe, Linear, and more.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        }
-        .sheet(isPresented: $showPresetGallery) {
-            DesignPresetGalleryView(
-                activeSlug: designSystem.presetSlug,
-                onSelect: { preset, body in
-                    designSystem.presetSlug = preset.slug
-                    designSystem.presetName = preset.name
-                    designSystem.presetContent = body
-                    designSystem.updatedAt = Date()
-                },
-                onClear: {
-                    designSystem.presetSlug = nil
-                    designSystem.presetName = nil
-                    designSystem.presetContent = nil
-                    designSystem.updatedAt = Date()
-                }
-            )
         }
     }
 
