@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 @testable import SketchToWeb
 
 final class RefinementPipelineTests: XCTestCase {

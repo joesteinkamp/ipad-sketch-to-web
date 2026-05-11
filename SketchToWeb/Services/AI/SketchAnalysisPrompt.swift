@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 /// Constructs the prompts used to convert hand-drawn wireframe sketches into web UI code.
 enum SketchAnalysisPrompt {
