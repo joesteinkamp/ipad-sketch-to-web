@@ -70,7 +70,7 @@ final class GeminiClient: Sendable {
     /// - Parameters:
     ///   - apiKey: Your Google AI / Gemini API key.
     ///   - model: The model identifier to use. Defaults to `gemini-3.1-pro-preview`.
-    init(apiKey: String, model: String = "gemini-3.1-pro-preview") {
+    nonisolated init(apiKey: String, model: String = "gemini-3.1-pro-preview") {
         self.apiKey = apiKey
         self.model = model
 

@@ -32,7 +32,7 @@ final class RefinementPipeline: Sendable {
 
     /// Creates a refinement pipeline with an injected client. Tests should use this initializer
     /// to substitute a mock; production code should call `live(apiKey:model:)` instead.
-    init(client: any GeminiAPI) {
+    nonisolated init(client: any GeminiAPI) {
         self.client = client
     }
 

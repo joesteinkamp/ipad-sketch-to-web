@@ -66,7 +66,7 @@ enum DesignDestination: String, CaseIterable, Identifiable, Codable, Sendable {
 
     /// Account identifiers used by `KeychainHelper` to namespace this destination's
     /// access token, refresh token, and expiry.
-    var keychainKeys: KeychainKeys {
+    nonisolated var keychainKeys: KeychainKeys {
         switch self {
         case .figma:
             return KeychainKeys(
