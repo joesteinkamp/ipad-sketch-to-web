@@ -9,6 +9,14 @@ enum HTMLTemplateEngine {
     /// rather than accumulate.
     static let themeStyleID = "sketch-theme-tokens"
 
+    /// `<script>` `id` for the runtime-injected Tailwind config block. The block
+    /// flips Tailwind CDN's `darkMode` to `'class'` (so the `dark` class on
+    /// `<html>` actually drives `dark:` variants) and registers shadcn semantic
+    /// color names (`bg-primary`, `bg-card`, …) that resolve to the CSS tokens
+    /// the theme block defines. Matched by the idempotency check in
+    /// `injectTheme(into:theme:)`.
+    static let tailwindConfigScriptID = "sketch-tailwind-config"
+
     /// Wrapper element `id` used to bracket runtime-injected icon-library tags
     /// (script and/or stylesheet). Matched by the idempotency check in
     /// `injectIconLibrary(into:library:)` so repeated calls replace rather than
@@ -41,6 +49,9 @@ enum HTMLTemplateEngine {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
         <script src="https://cdn.tailwindcss.com"></script>
+        <script id="\(tailwindConfigScriptID)">
+        \(tailwindConfigJS)
+        </script>
         \(iconLibraryHeadBlock(for: iconLibrary))
         <style id="\(themeStyleID)">
         \(themeCSS(for: theme))
@@ -115,11 +126,16 @@ enum HTMLTemplateEngine {
         \(themeCSS(for: theme))
         </style>
         """
+        let configBlock = """
+        <script id="\(tailwindConfigScriptID)">
+        \(tailwindConfigJS)
+        </script>
+        """
 
         var working = html
-        let existingPattern = #"<style id="\#(themeStyleID)">[\s\S]*?</style>"#
+        let existingStylePattern = #"<style id="\#(themeStyleID)">[\s\S]*?</style>"#
 
-        if let existing = working.range(of: existingPattern, options: .regularExpression) {
+        if let existing = working.range(of: existingStylePattern, options: .regularExpression) {
             working.replaceSubrange(existing, with: styleBlock)
         } else if let headEnd = working.range(of: "</head>", options: .caseInsensitive) {
             working.insert(contentsOf: styleBlock + "\n", at: headEnd.lowerBound)
@@ -130,6 +146,17 @@ enum HTMLTemplateEngine {
         } else {
             // No recognizable structure — prepend so at least the variables are present.
             working = styleBlock + "\n" + working
+        }
+
+        // Inject (or refresh) the Tailwind config script. The script body is
+        // theme-independent — it only references CSS variable names — so this
+        // is purely an idempotent presence check. Only meaningful when a head
+        // exists (the script needs `window.tailwind` from the CDN tag).
+        let existingConfigPattern = #"<script id="\#(tailwindConfigScriptID)">[\s\S]*?</script>"#
+        if let existing = working.range(of: existingConfigPattern, options: .regularExpression) {
+            working.replaceSubrange(existing, with: configBlock)
+        } else if let headEnd = working.range(of: "</head>", options: .caseInsensitive) {
+            working.insert(contentsOf: configBlock + "\n", at: headEnd.lowerBound)
         }
 
         return setDarkClassOnHTMLTag(in: working, isDark: theme.isDark)
@@ -256,15 +283,99 @@ enum HTMLTemplateEngine {
         )
     }
 
-    /// Renders the `:root` body for a given shadcn theme. The leading indent
-    /// keeps the output readable when embedded in a larger `<style>` block.
+    /// Renders the `:root` token block plus a `!important` body-theming rule
+    /// for a given shadcn theme. The leading indent keeps the output readable
+    /// when embedded in a larger `<style>` block.
+    ///
+    /// The body rule is what makes the toggle visible: Gemini frequently emits
+    /// `<body class="bg-white …">`, and `.bg-white` (specificity 0,0,1,0) beats
+    /// a plain `body { background: hsl(var(--background)) }` (0,0,0,1). We
+    /// force the page surface to track the theme regardless of what the model
+    /// stamped on `<body>`, since the body is the outermost canvas and ought
+    /// to follow the user's chosen base color and light/dark mode.
     private static func themeCSS(for theme: ShadcnTheme) -> String {
         let indented = theme.cssTokens()
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { "    " + $0 }
             .joined(separator: "\n")
-        return ":root {\n\(indented)\n}"
+        return """
+        :root {
+        \(indented)
+        }
+        body {
+            background-color: hsl(var(--background)) !important;
+            color: hsl(var(--foreground)) !important;
+        }
+        """
     }
+
+    /// Configures the Tailwind Play CDN once it has loaded. Two things matter:
+    ///
+    /// 1. `darkMode: 'class'` — by default the CDN uses `'media'`, so any
+    ///    `dark:` utility the model emits only fires on the iPad's OS-level
+    ///    appearance. Flipping to `'class'` makes those utilities follow the
+    ///    `dark` class we toggle on `<html>` in `setDarkClassOnHTMLTag`, so
+    ///    the user-chosen appearance actually drives them.
+    /// 2. Named shadcn colors — registering `background`, `primary`, `card`,
+    ///    etc. as Tailwind colors lets the model write `bg-primary` /
+    ///    `text-card-foreground` instead of the verbose arbitrary-value
+    ///    classes (`bg-[hsl(var(--primary))]`). Both forms work and theme
+    ///    correctly; the named form is more idiomatic and what real shadcn
+    ///    codebases use.
+    ///
+    /// The script is guarded by `if (window.tailwind)` so it's a no-op when
+    /// the model omitted the CDN tag (e.g. offline export).
+    private static let tailwindConfigJS = """
+    if (window.tailwind) {
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        border: 'hsl(var(--border))',
+                        input: 'hsl(var(--input))',
+                        ring: 'hsl(var(--ring))',
+                        background: 'hsl(var(--background))',
+                        foreground: 'hsl(var(--foreground))',
+                        primary: {
+                            DEFAULT: 'hsl(var(--primary))',
+                            foreground: 'hsl(var(--primary-foreground))'
+                        },
+                        secondary: {
+                            DEFAULT: 'hsl(var(--secondary))',
+                            foreground: 'hsl(var(--secondary-foreground))'
+                        },
+                        destructive: {
+                            DEFAULT: 'hsl(var(--destructive))',
+                            foreground: 'hsl(var(--destructive-foreground))'
+                        },
+                        muted: {
+                            DEFAULT: 'hsl(var(--muted))',
+                            foreground: 'hsl(var(--muted-foreground))'
+                        },
+                        accent: {
+                            DEFAULT: 'hsl(var(--accent))',
+                            foreground: 'hsl(var(--accent-foreground))'
+                        },
+                        popover: {
+                            DEFAULT: 'hsl(var(--popover))',
+                            foreground: 'hsl(var(--popover-foreground))'
+                        },
+                        card: {
+                            DEFAULT: 'hsl(var(--card))',
+                            foreground: 'hsl(var(--card-foreground))'
+                        }
+                    },
+                    borderRadius: {
+                        lg: 'var(--radius)',
+                        md: 'calc(var(--radius) - 2px)',
+                        sm: 'calc(var(--radius) - 4px)'
+                    }
+                }
+            }
+        };
+    }
+    """
 
     /// Base body styles: system font stack, antialiasing, and theme-aware colors.
     private static let baseCSS = """
