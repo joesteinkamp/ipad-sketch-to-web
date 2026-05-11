@@ -26,7 +26,21 @@ struct WebPreviewView: UIViewRepresentable {
     ///
     /// Order matters only for readability — both injectors are idempotent and
     /// operate on different `<style>`/`<script>` ids, so they don't collide.
-    private var processedHTML: String {
+    ///
+    /// Result is memoized on the coordinator so we don't rerun the regex-based
+    /// injectors on every `updateUIView` call (the input HTML can be tens of KB).
+    private func renderHTML(coordinator: Coordinator) -> String {
+        let library = appState.designSystemSnapshot?.iconLibrary ?? .none
+        let key = RenderKey(
+            htmlContent: htmlContent,
+            baseColorRaw: baseColorRaw,
+            appearanceRaw: appearanceRaw,
+            prefersDark: systemColorScheme == .dark,
+            iconLibrary: library
+        )
+        if let cached = coordinator.cached, cached.key == key {
+            return cached.rendered
+        }
         let base = ShadcnBaseColor(rawValue: baseColorRaw) ?? ShadcnThemeStorage.defaultBaseColor
         let appearance = ThemeAppearance(rawValue: appearanceRaw) ?? ShadcnThemeStorage.defaultAppearance
         let theme = ShadcnTheme.resolve(
@@ -35,8 +49,9 @@ struct WebPreviewView: UIViewRepresentable {
             systemPrefersDark: systemColorScheme == .dark
         )
         let themed = HTMLTemplateEngine.injectTheme(into: htmlContent, theme: theme)
-        let library = appState.designSystemSnapshot?.iconLibrary ?? .none
-        return HTMLTemplateEngine.injectIconLibrary(into: themed, library: library)
+        let rendered = HTMLTemplateEngine.injectIconLibrary(into: themed, library: library)
+        coordinator.cached = (key, rendered)
+        return rendered
     }
 
     func makeCoordinator() -> Coordinator {
@@ -60,7 +75,7 @@ struct WebPreviewView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        let rendered = processedHTML
+        let rendered = renderHTML(coordinator: context.coordinator)
         // Only reload when the HTML content (or theme-derived output) has actually changed.
         guard context.coordinator.lastLoadedContent != rendered else { return }
         context.coordinator.lastLoadedContent = rendered
@@ -69,8 +84,19 @@ struct WebPreviewView: UIViewRepresentable {
 
     // MARK: - Coordinator
 
+    struct RenderKey: Equatable {
+        let htmlContent: String
+        let baseColorRaw: String
+        let appearanceRaw: String
+        let prefersDark: Bool
+        let iconLibrary: IconLibrary
+    }
+
     final class Coordinator {
         /// Tracks the last loaded HTML so we avoid redundant reloads.
         var lastLoadedContent: String?
+        /// Memoized render keyed by inputs, so theme injection isn't rerun
+        /// on every `updateUIView` for the same content + theme combination.
+        var cached: (key: RenderKey, rendered: String)?
     }
 }
