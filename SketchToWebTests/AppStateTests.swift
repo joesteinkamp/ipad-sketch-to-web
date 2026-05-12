@@ -1,5 +1,6 @@
 import XCTest
 import PencilKit
+import SwiftData
 @testable import SketchToWeb
 
 @MainActor
@@ -161,6 +162,63 @@ final class AppStateTests: XCTestCase {
         await waitForCondition { !state.isRefining }
 
         XCTAssertEqual(state.error, .rateLimited(retryAfter: 12))
+    }
+
+    // MARK: - Load Stored Result
+
+    func testLoadStoredResultRebuildsHistoryFromGenerations() throws {
+        let schema = Schema([Project.self, ProjectFolder.self, Generation.self])
+        let container = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(isStoredInMemoryOnly: true)]
+        )
+        let project = Project(name: "Reload Me")
+        container.mainContext.insert(project)
+        let snapshot = PKDrawing().dataRepresentation()
+        let older = Generation(htmlPreview: "<div>v1</div>", reactCode: "v1()", drawingSnapshot: snapshot, project: project)
+        older.createdAt = Date(timeIntervalSince1970: 1_000)
+        let newer = Generation(htmlPreview: "<div>v2</div>", reactCode: "v2()", drawingSnapshot: snapshot, project: project)
+        newer.createdAt = Date(timeIntervalSince1970: 2_000)
+        container.mainContext.insert(older)
+        container.mainContext.insert(newer)
+
+        let state = AppState()
+        state.loadStoredResult(for: project)
+
+        XCTAssertEqual(state.history.count, 2)
+        XCTAssertEqual(state.generationHistoryIndex, 1)
+        XCTAssertEqual(state.generatedResult?.htmlPreview, "<div>v2</div>")
+        XCTAssertTrue(state.canGoBack)
+        XCTAssertFalse(state.canGoForward)
+    }
+
+    func testLoadStoredResultFallsBackToLegacyFields() {
+        let project = Project(
+            name: "Legacy",
+            generatedHTML: "<div>cached</div>",
+            generatedReactCode: "Cached()"
+        )
+
+        let state = AppState()
+        state.loadStoredResult(for: project)
+
+        XCTAssertEqual(state.history.count, 1)
+        XCTAssertEqual(state.generatedResult?.htmlPreview, "<div>cached</div>")
+        XCTAssertEqual(state.generatedResult?.reactCode, "Cached()")
+    }
+
+    func testLoadStoredResultClearsWhenProjectIsNil() {
+        let state = AppState()
+        state.generatedResult = makeCode("stale")
+        state.streamingText = "in-flight"
+        state.error = .network("boom")
+
+        state.loadStoredResult(for: nil)
+
+        XCTAssertNil(state.generatedResult)
+        XCTAssertNil(state.streamingText)
+        XCTAssertNil(state.error)
+        XCTAssertTrue(state.history.isEmpty)
     }
 
     // MARK: - Helpers

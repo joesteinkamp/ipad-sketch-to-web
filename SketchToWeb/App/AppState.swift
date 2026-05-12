@@ -167,6 +167,40 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Rehydrates `generatedResult` and `history` from a project's persisted
+    /// generations so reopening a project doesn't require another API call.
+    ///
+    /// History is rebuilt in chronological order from `project.generations`,
+    /// falling back to the legacy `generatedHTML` / `generatedReactCode`
+    /// fields for projects created before the `Generation` model existed.
+    func loadStoredResult(for project: Project?) {
+        streamingText = nil
+        error = nil
+
+        guard let project else {
+            history = GenerationHistory()
+            generatedResult = nil
+            return
+        }
+
+        var restored = GenerationHistory()
+        for generation in project.generations.sorted(by: { $0.createdAt < $1.createdAt }) {
+            restored.push(GeneratedCode(
+                htmlPreview: generation.htmlPreview,
+                reactCode: generation.reactCode
+            ))
+        }
+
+        if restored.isEmpty,
+           let html = project.generatedHTML,
+           let react = project.generatedReactCode {
+            restored.push(GeneratedCode(htmlPreview: html, reactCode: react))
+        }
+
+        history = restored
+        generatedResult = restored.current
+    }
+
     // MARK: - History Navigation
 
     /// Navigates to the previous version in generation history.
@@ -259,8 +293,12 @@ final class AppState: ObservableObject {
     }
 
     /// Creates a `Generation` record and publishes it for the view layer to persist.
+    /// Also caches the latest output on the `Project` itself so reopening the
+    /// project restores the preview without re-running the model.
     private func saveGeneration(_ result: GeneratedCode) {
         guard let project = currentProject else { return }
+        project.generatedHTML = result.htmlPreview
+        project.generatedReactCode = result.reactCode
         let generation = Generation(
             htmlPreview: result.htmlPreview,
             reactCode: result.reactCode,
