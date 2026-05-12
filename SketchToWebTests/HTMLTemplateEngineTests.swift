@@ -443,6 +443,56 @@ final class HTMLTemplateEngineTests: XCTestCase {
         )
     }
 
+    // MARK: - Neutral Utility Overrides
+
+    /// Even with the body force-override, a wrapper div like
+    /// `<div class="min-h-screen bg-white">` paints over the themed body and
+    /// makes the toggle look broken. The injected style block must remap the
+    /// common neutral Tailwind surface/text/border utilities to shadcn tokens
+    /// so any wrapper div re-themes too.
+    func testInjectThemeRemapsCommonNeutralSurfaces() {
+        let themed = HTMLTemplateEngine.injectTheme(
+            into: modelHTML,
+            theme: ShadcnTheme(base: .slate, isDark: true)
+        )
+
+        // Light-surface utilities → --background
+        XCTAssertTrue(themed.contains(".bg-white"))
+        XCTAssertTrue(themed.contains(".bg-gray-50"))
+        XCTAssertTrue(themed.contains(".bg-slate-100"))
+        XCTAssertTrue(themed.contains("background-color: hsl(var(--background)) !important"))
+
+        // Inverted-surface utilities → --foreground
+        XCTAssertTrue(themed.contains(".bg-gray-900"))
+        XCTAssertTrue(themed.contains(".bg-black"))
+
+        // Body text → --foreground
+        XCTAssertTrue(themed.contains(".text-gray-900"))
+        XCTAssertTrue(themed.contains(".text-black"))
+
+        // Muted text → --muted-foreground
+        XCTAssertTrue(themed.contains(".text-gray-500"))
+        XCTAssertTrue(themed.contains("color: hsl(var(--muted-foreground)) !important"))
+
+        // Borders → --border
+        XCTAssertTrue(themed.contains(".border-gray-200"))
+        XCTAssertTrue(themed.contains("border-color: hsl(var(--border)) !important"))
+    }
+
+    /// Accent utilities must NOT be coerced — `bg-blue-600` should stay blue
+    /// even when the theme switches; only neutrals follow the token palette.
+    func testInjectThemeLeavesAccentUtilitiesAlone() {
+        let themed = HTMLTemplateEngine.injectTheme(
+            into: modelHTML,
+            theme: ShadcnTheme(base: .slate, isDark: false)
+        )
+
+        XCTAssertFalse(themed.contains(".bg-blue-"))
+        XCTAssertFalse(themed.contains(".bg-red-"))
+        XCTAssertFalse(themed.contains(".text-blue-"))
+        XCTAssertFalse(themed.contains(".text-green-"))
+    }
+
     // MARK: - Tailwind Config Injection
 
     func testInjectThemeAddsTailwindConfigScript() {
