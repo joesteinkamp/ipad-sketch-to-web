@@ -95,6 +95,7 @@ struct ContentView: View {
         }
         .onChange(of: selectedProject) { _, newProject in
             appState.currentProject = newProject
+            appState.loadStoredResult(for: newProject)
             updateDesignSystemSnapshot(regenerateOnChange: false)
         }
         .onChange(of: appState.pendingGeneration) { _, generation in
@@ -132,6 +133,7 @@ struct ContentView: View {
                 selectedProject = projects.first
             }
             appState.currentProject = selectedProject
+            appState.loadStoredResult(for: selectedProject)
             updateDesignSystemSnapshot(regenerateOnChange: false)
         }
         .sheet(isPresented: $showingSettings) {
