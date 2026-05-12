@@ -358,7 +358,18 @@ private struct SnapshotableWebPreviewView: UIViewRepresentable {
     @Environment(\.colorScheme) private var systemColorScheme
     @EnvironmentObject private var appState: AppState
 
-    private var processedHTML: String {
+    private func renderHTML(coordinator: Coordinator) -> String {
+        let library = appState.designSystemSnapshot?.iconLibrary ?? .none
+        let key = RenderKey(
+            htmlContent: htmlContent,
+            baseColorRaw: baseColorRaw,
+            appearanceRaw: appearanceRaw,
+            prefersDark: systemColorScheme == .dark,
+            iconLibrary: library
+        )
+        if let cached = coordinator.cached, cached.key == key {
+            return cached.rendered
+        }
         let base = ShadcnBaseColor(rawValue: baseColorRaw) ?? ShadcnThemeStorage.defaultBaseColor
         let appearance = ThemeAppearance(rawValue: appearanceRaw) ?? ShadcnThemeStorage.defaultAppearance
         let theme = ShadcnTheme.resolve(
@@ -367,8 +378,9 @@ private struct SnapshotableWebPreviewView: UIViewRepresentable {
             systemPrefersDark: systemColorScheme == .dark
         )
         let themed = HTMLTemplateEngine.injectTheme(into: htmlContent, theme: theme)
-        let library = appState.designSystemSnapshot?.iconLibrary ?? .none
-        return HTMLTemplateEngine.injectIconLibrary(into: themed, library: library)
+        let rendered = HTMLTemplateEngine.injectIconLibrary(into: themed, library: library)
+        coordinator.cached = (key, rendered)
+        return rendered
     }
 
     func makeCoordinator() -> Coordinator {
@@ -395,13 +407,22 @@ private struct SnapshotableWebPreviewView: UIViewRepresentable {
     }
 
     func updateUIView(_ webView: WKWebView, context: Context) {
-        let rendered = processedHTML
+        let rendered = renderHTML(coordinator: context.coordinator)
         guard context.coordinator.lastLoadedContent != rendered else { return }
         context.coordinator.lastLoadedContent = rendered
         webView.loadHTMLString(rendered, baseURL: nil)
     }
 
+    struct RenderKey: Equatable {
+        let htmlContent: String
+        let baseColorRaw: String
+        let appearanceRaw: String
+        let prefersDark: Bool
+        let iconLibrary: IconLibrary
+    }
+
     final class Coordinator {
         var lastLoadedContent: String?
+        var cached: (key: RenderKey, rendered: String)?
     }
 }

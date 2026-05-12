@@ -12,16 +12,21 @@ struct GenerationHistoryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    @Query private var allGenerations: [Generation]
+    @Query private var generations: [Generation]
 
     /// The id of the generation currently loaded in the preview.
     @State private var activeGenerationID: UUID?
 
-    // Filter generations to the current project.
-    private var generations: [Generation] {
-        allGenerations
-            .filter { $0.project?.id == project.id }
-            .sorted { $0.createdAt > $1.createdAt }
+    init(project: Project) {
+        self.project = project
+        let projectID = project.id
+        let predicate = #Predicate<Generation> { generation in
+            generation.project?.id == projectID
+        }
+        _generations = Query(
+            filter: predicate,
+            sort: [SortDescriptor(\Generation.createdAt, order: .reverse)]
+        )
     }
 
     var body: some View {
@@ -86,9 +91,11 @@ private struct GenerationRow: View {
 
     @Environment(\.displayScale) private var displayScale
 
+    @State private var thumbnailImage: UIImage?
+    @State private var snippet: String = ""
+
     var body: some View {
         HStack(spacing: 12) {
-            // Drawing thumbnail
             drawingThumbnail
                 .frame(width: 60, height: 45)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -103,7 +110,7 @@ private struct GenerationRow: View {
                     .fontWeight(isActive ? .semibold : .regular)
                     .foregroundStyle(isActive ? .primary : .secondary)
 
-                Text(String(generation.htmlPreview.prefix(100)))
+                Text(snippet)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(2)
@@ -117,16 +124,15 @@ private struct GenerationRow: View {
             }
         }
         .padding(.vertical, 4)
+        .task(id: generation.id) {
+            await loadRowContent()
+        }
     }
 
     @ViewBuilder
     private var drawingThumbnail: some View {
-        if let drawing = try? PKDrawing(data: generation.decompressedSnapshot) {
-            let image = drawing.image(
-                from: drawing.bounds,
-                scale: displayScale
-            )
-            Image(uiImage: image)
+        if let thumbnailImage {
+            Image(uiImage: thumbnailImage)
                 .resizable()
                 .scaledToFit()
                 .background(Color(.systemBackground))
@@ -138,5 +144,26 @@ private struct GenerationRow: View {
                         .foregroundStyle(.quaternary)
                 }
         }
+    }
+
+    /// Reads the snapshot blob + html prefix on the main actor (SwiftData models
+    /// aren't Sendable), then hands the raw bytes off to a detached task so the
+    /// zlib decompress and PKDrawing render don't block the list scroll.
+    private func loadRowContent() async {
+        let snapshotData = generation.drawingSnapshot
+        let previewPrefix = String(generation.htmlPreview.prefix(100))
+        let scale = displayScale
+
+        snippet = previewPrefix
+
+        let image: UIImage? = await Task.detached(priority: .userInitiated) {
+            let decompressed = (try? (snapshotData as NSData).decompressed(using: .zlib)) as Data? ?? snapshotData
+            guard let drawing = try? PKDrawing(data: decompressed) else { return nil }
+            let bounds = drawing.bounds
+            guard bounds.width > 0, bounds.height > 0 else { return nil }
+            return drawing.image(from: bounds, scale: scale)
+        }.value
+
+        thumbnailImage = image
     }
 }

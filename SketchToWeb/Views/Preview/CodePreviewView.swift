@@ -57,11 +57,13 @@ struct CodePreviewView: View {
                     .transition(.opacity.combined(with: .scale))
             }
         }
-        .onChange(of: code) { _, newCode in
-            highlightedResult = Self.highlight(newCode)
-        }
-        .onAppear {
-            highlightedResult = Self.highlight(code)
+        .task(id: code) {
+            let snapshot = code
+            let highlighted = await Task.detached(priority: .userInitiated) {
+                Self.highlight(snapshot)
+            }.value
+            guard !Task.isCancelled else { return }
+            highlightedResult = highlighted
         }
     }
 
