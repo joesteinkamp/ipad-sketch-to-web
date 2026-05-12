@@ -38,6 +38,9 @@ struct ProjectListView: View {
                             Label("Delete", systemImage: "trash")
                         }
                     }
+                    .contextMenu {
+                        projectContextMenu(project)
+                    }
                 }
             }
 
@@ -70,6 +73,9 @@ struct ProjectListView: View {
                                 }
                                 .tint(.orange)
                             }
+                            .contextMenu {
+                                projectContextMenu(project)
+                            }
                         }
                     }
                 } header: {
@@ -100,6 +106,9 @@ struct ProjectListView: View {
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
+                        }
+                        .contextMenu {
+                            projectContextMenu(project)
                         }
                     }
                 }
@@ -186,6 +195,49 @@ struct ProjectListView: View {
 
     private var unfiledProjects: [Project] {
         filteredProjects.filter { $0.folder == nil }
+    }
+
+    // MARK: - Project Context Menu
+
+    @ViewBuilder
+    private func projectContextMenu(_ project: Project) -> some View {
+        Menu {
+            ForEach(folders) { folder in
+                Button {
+                    project.folder = folder
+                } label: {
+                    if project.folder?.id == folder.id {
+                        Label(folder.name, systemImage: "checkmark")
+                    } else {
+                        Text(folder.name)
+                    }
+                }
+            }
+
+            if !folders.isEmpty {
+                Divider()
+            }
+
+            Button {
+                project.folder = nil
+            } label: {
+                if project.folder == nil {
+                    Label("Unfiled", systemImage: "checkmark")
+                } else {
+                    Text("Unfiled")
+                }
+            }
+        } label: {
+            Label("Move to Folder", systemImage: "folder")
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            deleteProject(project)
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
     }
 
     // MARK: - Folder Header
