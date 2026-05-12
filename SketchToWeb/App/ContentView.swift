@@ -26,6 +26,7 @@ struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var appState: AppState
     @Query(sort: \DesignSystem.createdAt) private var designSystems: [DesignSystem]
+    @Query(sort: \Project.createdAt, order: .reverse) private var projects: [Project]
     @State private var selectedProject: Project?
     @State private var showingSettings = false
     @AppStorage("layoutMode") private var layoutModeRaw: String = LayoutMode.split.rawValue
@@ -127,6 +128,9 @@ struct ContentView: View {
             if !isShowing { updateDesignSystemSnapshot(regenerateOnChange: true) }
         }
         .onAppear {
+            if selectedProject == nil {
+                selectedProject = projects.first
+            }
             appState.currentProject = selectedProject
             updateDesignSystemSnapshot(regenerateOnChange: false)
         }
