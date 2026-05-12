@@ -283,16 +283,25 @@ enum HTMLTemplateEngine {
         )
     }
 
-    /// Renders the `:root` token block plus a `!important` body-theming rule
-    /// for a given shadcn theme. The leading indent keeps the output readable
-    /// when embedded in a larger `<style>` block.
+    /// Renders the `:root` token block plus the `!important` overrides that
+    /// make the theme toggle visible across model-generated HTML. The leading
+    /// indent keeps the output readable when embedded in a larger `<style>`
+    /// block.
     ///
-    /// The body rule is what makes the toggle visible: Gemini frequently emits
-    /// `<body class="bg-white …">`, and `.bg-white` (specificity 0,0,1,0) beats
-    /// a plain `body { background: hsl(var(--background)) }` (0,0,0,1). We
-    /// force the page surface to track the theme regardless of what the model
-    /// stamped on `<body>`, since the body is the outermost canvas and ought
-    /// to follow the user's chosen base color and light/dark mode.
+    /// Why the body rule isn't enough: the prompt asks Gemini to use shadcn
+    /// arbitrary-value classes (`bg-[hsl(var(--background))]`), but in practice
+    /// it still emits raw Tailwind utilities — `<body class="bg-white …">`,
+    /// `<div class="min-h-screen bg-gray-50">`, `<p class="text-gray-600">`.
+    /// Class selectors (specificity 0,0,1,0) beat a plain `body {…}` rule
+    /// (0,0,0,1), and a full-bleed wrapper div paints right over a themed
+    /// body, so toggling base color or Light↔Dark looks like nothing happens.
+    ///
+    /// We address both: the body itself is forced via `!important`, AND the
+    /// most common "neutral" Tailwind utilities (white/black and the
+    /// gray/slate/zinc/neutral/stone scales used for surfaces, text, and
+    /// borders) are remapped to the corresponding shadcn token. Accent
+    /// utilities (`bg-blue-600`, etc.) are deliberately left alone — those
+    /// stay as accents regardless of theme.
     private static func themeCSS(for theme: ShadcnTheme) -> String {
         let indented = theme.cssTokens()
             .split(separator: "\n", omittingEmptySubsequences: false)
@@ -306,8 +315,83 @@ enum HTMLTemplateEngine {
             background-color: hsl(var(--background)) !important;
             color: hsl(var(--foreground)) !important;
         }
+        \(neutralUtilityOverridesCSS)
         """
     }
+
+    /// `!important` overrides that pin the most common neutral Tailwind
+    /// utilities to shadcn theme tokens. Selectors are theme-independent
+    /// because they reference CSS variables that the `:root` block (which is
+    /// regenerated on every theme switch) supplies. Listed shades cover the
+    /// surfaces, body text, muted text, and borders Gemini actually emits;
+    /// uncommon middle shades (300, 400 for bg; 200, 300 for text) are
+    /// deliberately omitted so accent-tinted neutrals don't get coerced.
+    private static let neutralUtilityOverridesCSS = """
+    /* --- Page surfaces (light) --- */
+    .bg-white,
+    .bg-gray-50, .bg-gray-100,
+    .bg-slate-50, .bg-slate-100,
+    .bg-zinc-50, .bg-zinc-100,
+    .bg-neutral-50, .bg-neutral-100,
+    .bg-stone-50, .bg-stone-100 {
+        background-color: hsl(var(--background)) !important;
+    }
+    /* --- Subtle surfaces (cards / muted) --- */
+    .bg-gray-200, .bg-slate-200, .bg-zinc-200, .bg-neutral-200, .bg-stone-200 {
+        background-color: hsl(var(--muted)) !important;
+    }
+    /* --- Inverted surfaces (footers / dark buttons) --- */
+    .bg-black,
+    .bg-gray-800, .bg-gray-900, .bg-gray-950,
+    .bg-slate-800, .bg-slate-900, .bg-slate-950,
+    .bg-zinc-800, .bg-zinc-900, .bg-zinc-950,
+    .bg-neutral-800, .bg-neutral-900, .bg-neutral-950,
+    .bg-stone-800, .bg-stone-900, .bg-stone-950 {
+        background-color: hsl(var(--foreground)) !important;
+    }
+    /* --- Body text --- */
+    .text-black,
+    .text-gray-800, .text-gray-900, .text-gray-950,
+    .text-slate-800, .text-slate-900, .text-slate-950,
+    .text-zinc-800, .text-zinc-900, .text-zinc-950,
+    .text-neutral-800, .text-neutral-900, .text-neutral-950,
+    .text-stone-800, .text-stone-900, .text-stone-950 {
+        color: hsl(var(--foreground)) !important;
+    }
+    /* --- Muted / secondary text --- */
+    .text-gray-400, .text-gray-500, .text-gray-600, .text-gray-700,
+    .text-slate-400, .text-slate-500, .text-slate-600, .text-slate-700,
+    .text-zinc-400, .text-zinc-500, .text-zinc-600, .text-zinc-700,
+    .text-neutral-400, .text-neutral-500, .text-neutral-600, .text-neutral-700,
+    .text-stone-400, .text-stone-500, .text-stone-600, .text-stone-700 {
+        color: hsl(var(--muted-foreground)) !important;
+    }
+    /* --- Text on inverted surfaces --- */
+    .text-white,
+    .text-gray-50, .text-gray-100,
+    .text-slate-50, .text-slate-100,
+    .text-zinc-50, .text-zinc-100,
+    .text-neutral-50, .text-neutral-100,
+    .text-stone-50, .text-stone-100 {
+        color: hsl(var(--background)) !important;
+    }
+    /* --- Borders / dividers --- */
+    .border-gray-100, .border-gray-200, .border-gray-300,
+    .border-slate-100, .border-slate-200, .border-slate-300,
+    .border-zinc-100, .border-zinc-200, .border-zinc-300,
+    .border-neutral-100, .border-neutral-200, .border-neutral-300,
+    .border-stone-100, .border-stone-200, .border-stone-300 {
+        border-color: hsl(var(--border)) !important;
+    }
+    /* Plain `border` (no color suffix) defaults to gray-200 in Tailwind. */
+    .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+    .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+    .divide-zinc-200 > :not([hidden]) ~ :not([hidden]),
+    .divide-neutral-200 > :not([hidden]) ~ :not([hidden]),
+    .divide-stone-200 > :not([hidden]) ~ :not([hidden]) {
+        border-color: hsl(var(--border)) !important;
+    }
+    """
 
     /// Configures the Tailwind Play CDN once it has loaded. Two things matter:
     ///

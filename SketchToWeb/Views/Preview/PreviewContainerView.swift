@@ -102,37 +102,40 @@ struct PreviewContainerView: View {
 
     // MARK: - Theme Menu
 
-    // Picker-in-Menu is flaky on iPadOS (selection often doesn't write back
-    // to the binding, with a "updateVisibleMenuWithBlock while no context
-    // menu is visible" console warning). Explicit Buttons inside Sections
-    // write through reliably, so the preview actually re-themes on toggle.
+    // Two iPadOS quirks we have to work around in this toolbar menu:
+    //
+    // 1. Picker-in-Menu doesn't write back reliably — selecting an option
+    //    dismisses the menu but the binding often never updates, so AppStorage
+    //    stays put and the preview stays stale.
+    // 2. Button-in-Menu with a dynamic label (Label-when-selected, Text-when-not)
+    //    causes SwiftUI to rebuild the underlying UIMenu after a tap. By then
+    //    the menu has already dismissed, which is the
+    //    `updateVisibleMenuWithBlock while no context menu is visible` console
+    //    warning. It's cosmetic, but it's also a signal the menu is fighting
+    //    SwiftUI's state model.
+    //
+    // Toggle-in-Menu sidesteps both: UIMenu renders the checked state as a
+    // native checkmark (so the label is static — no rebuild after tap), and
+    // the binding writes through every time. The setter coerces "tapping the
+    // active option" into a no-op so the user can't accidentally clear the
+    // selection.
     @ViewBuilder
     private var themeMenu: some View {
         Menu {
             Section("Base color") {
                 ForEach(ShadcnBaseColor.allCases) { color in
-                    Button {
-                        shadcnBaseColor = color.rawValue
-                    } label: {
-                        if shadcnBaseColor == color.rawValue {
-                            Label(color.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(color.displayName)
-                        }
-                    }
+                    Toggle(color.displayName, isOn: Binding(
+                        get: { shadcnBaseColor == color.rawValue },
+                        set: { isOn in if isOn { shadcnBaseColor = color.rawValue } }
+                    ))
                 }
             }
             Section("Mode") {
                 ForEach(ThemeAppearance.allCases) { appearance in
-                    Button {
-                        themeAppearance = appearance.rawValue
-                    } label: {
-                        if themeAppearance == appearance.rawValue {
-                            Label(appearance.displayName, systemImage: "checkmark")
-                        } else {
-                            Text(appearance.displayName)
-                        }
-                    }
+                    Toggle(appearance.displayName, isOn: Binding(
+                        get: { themeAppearance == appearance.rawValue },
+                        set: { isOn in if isOn { themeAppearance = appearance.rawValue } }
+                    ))
                 }
             }
         } label: {
