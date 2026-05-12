@@ -69,7 +69,7 @@ struct CodePreviewView: View {
 
     // MARK: - Syntax Highlighting
 
-    private static func highlight(_ code: String) -> AttributedString {
+    nonisolated private static func highlight(_ code: String) -> AttributedString {
         var result = AttributedString(code)
 
         // Base style: light text on dark background.
@@ -87,7 +87,7 @@ struct CodePreviewView: View {
     }
 
     /// Highlights JavaScript/JSX keywords in purple.
-    private static func highlightKeywords(_ attributed: inout AttributedString) {
+    nonisolated private static func highlightKeywords(_ attributed: inout AttributedString) {
         let plain = String(attributed.characters)
         let nsRange = NSRange(plain.startIndex..., in: plain)
 
@@ -101,7 +101,7 @@ struct CodePreviewView: View {
     }
 
     /// Applies a foreground color to all matches of `pattern` in the attributed string.
-    private static func highlightPattern(_ attributed: inout AttributedString, pattern: String, color: Color) {
+    nonisolated private static func highlightPattern(_ attributed: inout AttributedString, pattern: String, color: Color) {
         let plain = String(attributed.characters)
         let nsRange = NSRange(plain.startIndex..., in: plain)
 
