@@ -19,6 +19,8 @@ struct ProjectListView: View {
     @State private var renamingFolder: ProjectFolder?
     @State private var renameFolderText: String = ""
     @State private var colorPickerFolder: ProjectFolder?
+    @State private var renamingProject: Project?
+    @State private var renameProjectText: String = ""
 
     private var folderColors: [(name: String, hex: String)] { AppColors.folderPalette }
 
@@ -37,6 +39,9 @@ struct ProjectListView: View {
                         } label: {
                             Label("Delete", systemImage: "trash")
                         }
+                    }
+                    .contextMenu {
+                        projectContextMenu(project)
                     }
                 }
             }
@@ -70,6 +75,9 @@ struct ProjectListView: View {
                                 }
                                 .tint(.orange)
                             }
+                            .contextMenu {
+                                projectContextMenu(project)
+                            }
                         }
                     }
                 } header: {
@@ -100,6 +108,9 @@ struct ProjectListView: View {
                             } label: {
                                 Label("Delete", systemImage: "trash")
                             }
+                        }
+                        .contextMenu {
+                            projectContextMenu(project)
                         }
                     }
                 }
@@ -167,6 +178,24 @@ struct ProjectListView: View {
         .sheet(item: $colorPickerFolder) { folder in
             folderColorPicker(folder)
         }
+        .alert("Rename Project", isPresented: Binding(
+            get: { renamingProject != nil },
+            set: { if !$0 { renamingProject = nil } }
+        )) {
+            TextField("Project name", text: $renameProjectText)
+            Button("Cancel", role: .cancel) {
+                renamingProject = nil
+            }
+            Button("Rename") {
+                let trimmed = renameProjectText.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty {
+                    renamingProject?.name = trimmed
+                }
+                renamingProject = nil
+            }
+        } message: {
+            Text("Enter a new name for the project.")
+        }
     }
 
     // MARK: - Filtered Data
@@ -186,6 +215,56 @@ struct ProjectListView: View {
 
     private var unfiledProjects: [Project] {
         filteredProjects.filter { $0.folder == nil }
+    }
+
+    // MARK: - Project Context Menu
+
+    @ViewBuilder
+    private func projectContextMenu(_ project: Project) -> some View {
+        Button {
+            renameProjectText = project.name
+            renamingProject = project
+        } label: {
+            Label("Rename", systemImage: "pencil")
+        }
+
+        Menu {
+            ForEach(folders) { folder in
+                Button {
+                    project.folder = folder
+                } label: {
+                    if project.folder?.id == folder.id {
+                        Label(folder.name, systemImage: "checkmark")
+                    } else {
+                        Text(folder.name)
+                    }
+                }
+            }
+
+            if !folders.isEmpty {
+                Divider()
+            }
+
+            Button {
+                project.folder = nil
+            } label: {
+                if project.folder == nil {
+                    Label("Unfiled", systemImage: "checkmark")
+                } else {
+                    Text("Unfiled")
+                }
+            }
+        } label: {
+            Label("Move to Folder", systemImage: "folder")
+        }
+
+        Divider()
+
+        Button(role: .destructive) {
+            deleteProject(project)
+        } label: {
+            Label("Delete", systemImage: "trash")
+        }
     }
 
     // MARK: - Folder Header
