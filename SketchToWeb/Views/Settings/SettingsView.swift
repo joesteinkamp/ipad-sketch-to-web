@@ -6,8 +6,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var apiKey: String = ""
-    @State private var connectionStatus: ConnectionStatus = .unknown
-    @State private var isTesting = false
     @State private var showingDesignSystem = false
     @State private var showingProjectDesign = false
 
@@ -40,7 +38,6 @@ struct SettingsView: View {
                 appearanceSection
                 designSystemSection
                 designToolsSection
-                connectionSection
             }
             .navigationTitle("Settings")
             .toolbar {
@@ -74,7 +71,6 @@ struct SettingsView: View {
                 Button("Clear API Key", role: .destructive) {
                     apiKey = ""
                     KeychainHelper.deleteAPIKey()
-                    connectionStatus = .unknown
                 }
             }
         } header: {
@@ -246,49 +242,6 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - Connection Test
-
-    @ViewBuilder
-    private var connectionSection: some View {
-        Section("Connection") {
-            HStack {
-                Button {
-                    testConnection()
-                } label: {
-                    if isTesting {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text("Testing...")
-                    } else {
-                        Label("Test Connection", systemImage: "antenna.radiowaves.left.and.right")
-                    }
-                }
-                .disabled(apiKey.isEmpty || isTesting)
-
-                Spacer()
-
-                statusIndicator
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var statusIndicator: some View {
-        switch connectionStatus {
-        case .unknown:
-            EmptyView()
-        case .connected:
-            Label("Connected", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-                .font(.subheadline)
-        case .error(let message):
-            Label(message, systemImage: "xmark.octagon.fill")
-                .foregroundStyle(.red)
-                .font(.subheadline)
-                .lineLimit(2)
-        }
-    }
-
     // MARK: - Helpers
 
     private func saveAPIKey() {
@@ -309,62 +262,4 @@ struct SettingsView: View {
         }
     }
 
-    private func testConnection() {
-        saveAPIKey()
-        isTesting = true
-        connectionStatus = .unknown
-
-        Task {
-            do {
-                try await performTestRequest()
-                connectionStatus = .connected
-            } catch {
-                connectionStatus = .error(error.localizedDescription)
-            }
-            isTesting = false
-        }
-    }
-
-    /// Sends a minimal generateContent request to the Gemini API to verify the key is valid.
-    private func performTestRequest() async throws {
-        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(selectedModel):generateContent?key=\(apiKey)") else {
-            throw URLError(.badURL)
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-
-        let payload: [String: Any] = [
-            "contents": [
-                ["parts": [["text": "Hi"]]]
-            ],
-            "generationConfig": [
-                "maxOutputTokens": 16
-            ]
-        ]
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw URLError(.badServerResponse)
-        }
-
-        guard (200...299).contains(httpResponse.statusCode) else {
-            throw NSError(
-                domain: "SettingsView",
-                code: httpResponse.statusCode,
-                userInfo: [NSLocalizedDescriptionKey: "HTTP \(httpResponse.statusCode)"]
-            )
-        }
-    }
-
-    // MARK: - Connection Status
-
-    private enum ConnectionStatus {
-        case unknown
-        case connected
-        case error(String)
-    }
 }
